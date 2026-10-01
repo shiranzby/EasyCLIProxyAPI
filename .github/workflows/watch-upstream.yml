@@ -1,0 +1,268 @@
+name: Follow upstream and bundle CPA plugins
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: Upstream tag to build (empty resolves the latest upstream release)
+        required: false
+        type: string
+      force:
+        description: Rebuild even when this tag already has a release here
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: follow-upstream-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: router-for-me/EasyCLIProxyAPI
+  PLUGIN_REPO: mmqz/cpa-multi-plugins
+
+jobs:
+  resolve:
+    name: Resolve upstream version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      version: ${{ steps.pick.outputs.version }}
+      should_build: ${{ steps.pick.outputs.should_build }}
+      plugin_tag: ${{ steps.pick.outputs.plugin_tag }}
+    steps:
+      - name: Resolve version
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          tag="$TARGET_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq .tag_name)"
+          fi
+          plugin_tag="$(gh api "repos/${PLUGIN_REPO}/releases/latest" --jq .tag_name)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "plugin_tag=$plugin_tag" >> "$GITHUB_OUTPUT"
+          echo "upstream=$tag plugins=$plugin_tag"
+          if [ "$FORCE" = "true" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            if gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx 'portable-update-windows.json'; then
+              echo "Release $tag already published here; nothing to do."
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.display_os }}-${{ matrix.arch }}
+    needs: resolve
+    if: needs.resolve.outputs.should_build == 'true'
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            os: windows
+            display_os: Windows
+            arch: amd64
+            suffix: zip
+          - runner: windows-11-arm
+            os: windows
+            display_os: Windows
+            arch: aarch64
+            suffix: zip
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout this fork (patch sources)
+        uses: actions/checkout@v7
+        with:
+          path: fork
+
+      - name: Checkout upstream release tag
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ needs.resolve.outputs.tag }}
+          path: app
+          fetch-depth: 1
+
+      - name: Apply CPA plugin patch
+        shell: bash
+        run: git -C app apply --whitespace=nowarn "$GITHUB_WORKSPACE/fork/.fork/cpa-plugins.patch"
+
+      - name: Resolve package stem
+        id: package
+        shell: bash
+        env:
+          APP_VERSION: ${{ needs.resolve.outputs.version }}
+        run: echo "stem=EasyCLIProxyAPI-v${APP_VERSION}-${{ matrix.display_os }}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: dtolnay/rust-toolchain@1.97.0
+
+      - name: Apply release version
+        shell: bash
+        working-directory: app
+        run: node scripts/set-version.mjs "${{ needs.resolve.outputs.version }}"
+
+      - name: Install frontend dependencies
+        shell: bash
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Build GUI
+        shell: bash
+        working-directory: app
+        run: bun tauri build --no-bundle
+
+      - name: Prepare portable directory
+        shell: bash
+        working-directory: app
+        run: >-
+          node scripts/portable.mjs
+          --binary "src-tauri/target/release/cpa-gui.exe"
+          --output "release/${{ steps.package.outputs.stem }}"
+          --os "${{ matrix.os }}"
+          --arch "${{ matrix.arch }}"
+          --download true
+
+      - name: Inject cpa-multi-plugins dynamic libraries
+        if: matrix.os == 'windows' && matrix.arch == 'amd64'
+        shell: bash
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLUGIN_TAG: ${{ needs.resolve.outputs.plugin_tag }}
+        run: |
+          set -euo pipefail
+          asset="cpa-multi-plugins-windows-amd64.zip"
+          rm -rf _plugins "$asset"
+          mkdir -p _plugins
+          gh release download "$PLUGIN_TAG" --repo "$PLUGIN_REPO" --pattern "$asset"
+          test -f "$asset"
+          unzip -o -q "$asset" -d _plugins
+          target="release/${{ steps.package.outputs.stem }}/cpa-core/plugins/windows/amd64"
+          mkdir -p "$target"
+          count=0
+          while IFS= read -r dll; do
+            cp -f "$dll" "$target/"
+            count=$((count + 1))
+          done < <(find _plugins -type f -name '*.dll')
+          if [ "$count" -eq 0 ]; then
+            echo "No plugin dll found in $asset"
+            exit 1
+          fi
+          rm -f "$asset"
+          echo "Injected $count plugin libraries"
+          ls -l "$target"
+
+      - name: Archive release
+        shell: pwsh
+        working-directory: app
+        run: Compress-Archive -Path "release/${{ steps.package.outputs.stem }}" -DestinationPath "${{ steps.package.outputs.stem }}.${{ matrix.suffix }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.stem }}
+          path: app/${{ steps.package.outputs.stem }}.${{ matrix.suffix }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish fork release
+    needs:
+      - resolve
+      - build
+    if: needs.resolve.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout upstream release tag (publishing scripts)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ needs.resolve.outputs.tag }}
+          path: app
+          fetch-depth: 1
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate portable update manifest
+        shell: bash
+        working-directory: app
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          node scripts/manifest.mjs \
+            --directory "$GITHUB_WORKSPACE/artifacts" \
+            --platform windows \
+            --repository "${{ github.repository }}" \
+            --tag "$RELEASE_TAG"
+
+      - name: Write release notes
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          PLUGIN_TAG: ${{ needs.resolve.outputs.plugin_tag }}
+        run: |
+          {
+            echo "EasyCLIProxyAPI ${RELEASE_TAG} - cpa-multi-plugins edition"
+            echo ""
+            echo "Rebuilt from upstream ${RELEASE_TAG} with the following changes:"
+            echo ""
+            echo "- Application update source redirected to this fork, so the in-app updater follows these builds."
+            echo "- Bundled cpa-multi-plugins ${PLUGIN_TAG} (WorkBuddy / Trae / Qoder / ZCode / MiMo) under cpa-core/plugins/windows/amd64 (Windows amd64 only)."
+            echo "- OAuth page exposes the five plugin providers alongside the built-in ones."
+            echo "- The CLIProxyAPI core itself is still fetched and updated from the official upstream releases."
+            echo ""
+            echo "Upstream release: https://github.com/${UPSTREAM_REPO}/releases/tag/${RELEASE_TAG}"
+            echo "Plugins release: https://github.com/${PLUGIN_REPO}/releases/tag/${PLUGIN_TAG}"
+          } > release-body.md
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" artifacts/* --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "EasyCLIProxyAPI ${RELEASE_TAG} (cpa-multi-plugins)" \
+              --notes-file release-body.md \
+              artifacts/*
+          fi
