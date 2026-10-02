@@ -4,6 +4,35 @@
   <a href="README.ja.md">日本語</a>
 </p>
 
+> [!IMPORTANT]
+> **这是 fork 构建：上游 EasyCLIProxyAPI + 五个插件 OAuth 入口 + 插件额度显示。**
+>
+> 本仓库**只做两件事**，其余与上游完全一致：
+>
+> 1. 为 [cpa-multi-plugins](https://github.com/mmqz/cpa-multi-plugins) 打包的五个插件
+>    （WorkBuddy / Trae / Qoder / ZCode / MiMo）补上 OAuth 入口卡片与凭据图标
+>    （上游对未知 provider 会回落成 Gemini 图标）；
+> 2. 在「额度查询」页为这些插件显示套餐额度与签到积分。
+>
+> 这两项改动已作为 PR 提交上游，但**尚未合并**：
+> [router-for-me/EasyCLIProxyAPI#337](https://github.com/router-for-me/EasyCLIProxyAPI/pull/337)。
+> 在上游合并之前，本仓库是它们的**临时替代方案（interim drop-in）**。
+>
+> **上游会同步更新**：定时任务每 6 小时跟随上游的最新 release，重新构建并发布**与上游同名 tag** 的版本。
+> 除上述补丁（`.fork/cpa-plugins.patch`，14 个文件）之外，本仓库不引入任何其他改动——
+> 内核升级、其余功能演进全部来自上游。
+> （唯一例外：应用内「检查更新」指向本仓库，否则拿不到带插件的构建。）
+>
+> 为什么没有直接使用内核的插件额度能力：见
+> [PR #337 的说明](https://github.com/router-for-me/EasyCLIProxyAPI/pull/337)。
+> 当前内核路由是存在的（`POST /v0/management/quota/fetch`），但**插件侧没有实现**该能力，
+> 返回 `501 no quota provider available for credential`，因此上游 PR
+> [#331](https://github.com/router-for-me/EasyCLIProxyAPI/pull/331) 目前拿不到数据、只会在额度页报错。
+> 本仓库改为读取插件自己的面板接口（`POST /v0/management/plugins/<id>/refresh`）作为过渡。
+>
+> 下载：见右侧 **Releases**，选择与上游同名 tag 的 `Windows-amd64.zip`。
+> 覆盖安装时请保留 `config.toml`、`oauth/` 与 `cpa-core/config.yaml`。
+
 <p align="center">
   <img src="src/assets/logo.jpg" width="112" alt="EasyCLIProxyAPI Logo">
 </p>

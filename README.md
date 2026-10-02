@@ -4,6 +4,39 @@
   <a href="README.ja.md">日本語</a>
 </p>
 
+> [!IMPORTANT]
+> **This is a fork build: upstream EasyCLIProxyAPI + five plugin OAuth entries + plugin quota cards.**
+>
+> This repository does **exactly two things**; everything else is upstream:
+>
+> 1. OAuth entry cards and credential icons for the five providers bundled by
+>    [cpa-multi-plugins](https://github.com/mmqz/cpa-multi-plugins)
+>    (WorkBuddy / Trae / Qoder / ZCode / MiMo) — upstream falls back to the Gemini icon for
+>    unknown providers;
+> 2. package-quota and sign-in-credit rows for those providers on the quota page.
+>
+> Both are submitted upstream but **not merged yet**:
+> [router-for-me/EasyCLIProxyAPI#337](https://github.com/router-for-me/EasyCLIProxyAPI/pull/337).
+> Until they land, this repository is their **interim drop-in replacement**.
+>
+> **Upstream stays in sync**: a scheduled workflow follows the latest upstream release every
+> 6 hours, rebuilds, and publishes under the **same tag as upstream**. Apart from the patch above
+> (`.fork/cpa-plugins.patch`, 14 files) nothing else differs from upstream — kernel updates and
+> every other feature come from there.
+> (One exception: the in-app updater points at this repository, otherwise it could not deliver the
+> plugin-enabled build.)
+>
+> Why not use the core plugin-quota API: see the
+> [PR #337 notes](https://github.com/router-for-me/EasyCLIProxyAPI/pull/337). The core route exists
+> (`POST /v0/management/quota/fetch`) but the **plugins do not implement** the capability and answer
+> `501 no quota provider available for credential`, which is why upstream PR
+> [#331](https://github.com/router-for-me/EasyCLIProxyAPI/pull/331) cannot render quota today and
+> only reports an error. This repository reads the plugin panel API
+> (`POST /v0/management/plugins/<id>/refresh`) in the meantime.
+>
+> Download: see **Releases** on the right — pick the `Windows-amd64.zip` whose tag matches upstream.
+> Keep `config.toml`, `oauth/` and `cpa-core/config.yaml` when overwriting an install.
+
 <p align="center">
   <img src="src/assets/logo.jpg" width="112" alt="EasyCLIProxyAPI Logo">
 </p>

@@ -1,7 +1,19 @@
 # cpa-multi-plugins edition
 
 This fork rebuilds upstream [EasyCLIProxyAPI](https://github.com/router-for-me/EasyCLIProxyAPI)
-with third-party CPA plugins bundled in.
+with third-party CPA plugins bundled in, and adds the UI the bundled providers need:
+OAuth entry cards plus plugin quota cards.
+
+Upstream is followed automatically (every 6 hours, same release tag); apart from
+`.fork/cpa-plugins.patch` nothing differs from upstream.
+
+The UI part is submitted upstream as
+[router-for-me/EasyCLIProxyAPI#337](https://github.com/router-for-me/EasyCLIProxyAPI/pull/337) and is
+not merged yet, so this fork doubles as an interim drop-in for it. Upstream
+[#331](https://github.com/router-for-me/EasyCLIProxyAPI/pull/331) takes the other route (core-side
+plugin quota API) and cannot render quota yet: the core route exists but every bundled plugin
+reports `supports_quota: false` and the core answers
+`501 no quota provider available for credential`.
 
 ## What `.github/workflows/watch-upstream.yml` does
 
