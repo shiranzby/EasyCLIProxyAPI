@@ -1,3 +1,16 @@
+diff --git a/src-tauri/capabilities/default.json b/src-tauri/capabilities/default.json
+index 3ddf213..da27db7 100644
+--- a/src-tauri/capabilities/default.json
++++ b/src-tauri/capabilities/default.json
+@@ -10,6 +10,7 @@
+     "core:window:allow-theme",
+     "core:window:allow-set-background-color",
+     "core:webview:allow-set-webview-background-color",
+-    "dialog:allow-open"
++    "dialog:allow-open",
++    "dialog:allow-save"
+   ]
+ }
 diff --git a/src-tauri/src/app_update.rs b/src-tauri/src/app_update.rs
 index c5a6f28..793d8f1 100644
 --- a/src-tauri/src/app_update.rs
@@ -12,7 +25,7 @@ index c5a6f28..793d8f1 100644
          return Err("Untrusted application update release URL".to_string());
      }
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
-index dca3d5a..4a26f4e 100644
+index dca3d5a..00ba39e 100644
 --- a/src-tauri/src/main.rs
 +++ b/src-tauri/src/main.rs
 @@ -103,13 +103,13 @@ const RELEASE_ATOM_URL: &str = "https://github.com/router-for-me/CLIProxyAPI/rel
@@ -33,11 +46,65 @@ index dca3d5a..4a26f4e 100644
  #[cfg(windows)]
  const APP_UPDATE_MANIFEST_NAME: &str = "portable-update-windows.json";
  #[cfg(target_os = "linux")]
+@@ -2685,6 +2685,7 @@ fn main() {
+             management_api::management_request,
+             provider_health::provider_health_probe,
+             management_api::upload_auth_file,
++            management_api::export_auth_file,
+             management_api::open_auth_files_directory,
+             management_api::open_core_logs_directory,
+             set_core_plugins_enabled,
 diff --git a/src-tauri/src/management_api.rs b/src-tauri/src/management_api.rs
-index 93b85b8..eece0e6 100644
+index 93b85b8..473941c 100644
 --- a/src-tauri/src/management_api.rs
 +++ b/src-tauri/src/management_api.rs
-@@ -352,6 +352,10 @@ pub(crate) fn management_endpoint(config: &GuiConfigFile, path: &str) -> Result<
+@@ -10,7 +10,7 @@ use std::{
+     collections::HashMap,
+     error::Error,
+     fs,
+-    path::Path,
++    path::{Path, PathBuf},
+     process::{Command, Stdio},
+     sync::LazyLock,
+     time::Duration,
+@@ -127,6 +127,36 @@ pub(crate) async fn upload_auth_file(
+     read_management_value(response).await
+ }
+ 
++#[tauri::command]
++pub(crate) fn export_auth_file(source: String, target: String) -> Result<(), String> {
++    let install_dir = core_install_dir()?;
++    let candidate = PathBuf::from(source.trim());
++    // The credentials list reports paths relative to the core install directory.
++    let source_path = if candidate.is_absolute() {
++        candidate
++    } else {
++        install_dir.join(candidate)
++    };
++    if !source_path.is_file() {
++        return Err(format!(
++            "Credential file not found: {}",
++            path_to_string(&source_path)
++        ));
++    }
++    let target_path = PathBuf::from(target.trim());
++    if target_path.as_os_str().is_empty() {
++        return Err("Credential export target is empty".to_string());
++    }
++    fs::copy(&source_path, &target_path).map_err(|error| {
++        format!(
++            "Failed to copy {} to {}: {error}",
++            path_to_string(&source_path),
++            path_to_string(&target_path)
++        )
++    })?;
++    Ok(())
++}
++
+ #[tauri::command]
+ pub(crate) fn open_auth_files_directory(
+     gui_config_state: tauri::State<'_, GuiConfigState>,
+@@ -352,6 +382,10 @@ pub(crate) fn management_endpoint(config: &GuiConfigFile, path: &str) -> Result<
          config.port,
          current_core_tls_settings()?.enabled,
      );
@@ -77,13 +144,18 @@ index 0000000..a64bd48
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Trae</title><path d="M7 6h10v2.2H7V6zm3.9 0h2.2v12h-2.2V6z"/></svg>
 diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
-index 3052237..10ba20c 100644
+index 3052237..85fc2ad 100644
 --- a/src/i18n/ja.ts
 +++ b/src/i18n/ja.ts
-@@ -1699,4 +1699,10 @@ export const jaOverrides = {
+@@ -1699,4 +1699,15 @@ export const jaOverrides = {
    'quota.service.error.unrecognized': '上流からクォータデータが返されましたが、形式を認識できません',
    'quota.service.error.codexResetOnly': 'リセットクォータを使用できるのは Codex 認証情報のみです',
    'quota.service.error.missingConsumeAuthIndex': 'auth-index がないためリセットクォータを使用できません',
++  'authFiles.export': 'エクスポート',
++  'authFiles.exported': '{name} をエクスポートしました',
++  'authFiles.exportFailed': 'エクスポートに失敗: {error}',
++  'quota.plugin.pool': '全アカウント合計',
++  'quota.plugin.poolDetail': '{count} アカウント · 残り {remain} / {size}',
 +  'quota.plugin.packages': 'パッケージ枠',
 +  'quota.plugin.packagesDetail': '残り {remain} / {size} · {count} パッケージ',
 +  'quota.plugin.regionDetail': '残り {remain} / {size}',
@@ -92,13 +164,18 @@ index 3052237..10ba20c 100644
 +  'quota.plugin.checkinDetail': '本日 +{today} · 累計 {total} · {streak} 日連続',
  } satisfies Record<MessageKey, string>;
 diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
-index 62dc510..5ffe572 100644
+index 62dc510..b48e703 100644
 --- a/src/i18n/locales/en.ts
 +++ b/src/i18n/locales/en.ts
-@@ -1699,4 +1699,10 @@ export const en: Record<MessageKey, string> = {
+@@ -1699,4 +1699,15 @@ export const en: Record<MessageKey, string> = {
    'quota.service.error.unrecognized': 'Upstream returned quota data in an unrecognized format',
    'quota.service.error.codexResetOnly': 'Only Codex credentials support reset credits',
    'quota.service.error.missingConsumeAuthIndex': 'Missing auth-index; the reset credit cannot be used',
++  'authFiles.export': 'Export',
++  'authFiles.exported': 'Exported {name}',
++  'authFiles.exportFailed': 'Export failed: {error}',
++  'quota.plugin.pool': 'All accounts',
++  'quota.plugin.poolDetail': '{count} accounts · {remain} of {size} left',
 +  'quota.plugin.packages': 'Package quota',
 +  'quota.plugin.packagesDetail': '{remain} of {size} left · {count} packages',
 +  'quota.plugin.regionDetail': '{remain} of {size} left',
@@ -107,13 +184,18 @@ index 62dc510..5ffe572 100644
 +  'quota.plugin.checkinDetail': '+{today} today · {total} total · {streak} day streak',
  };
 diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
-index c58df9f..11723ac 100644
+index c58df9f..912a9c8 100644
 --- a/src/i18n/locales/zh-CN.ts
 +++ b/src/i18n/locales/zh-CN.ts
-@@ -1698,6 +1698,12 @@ export const zhCN = {
+@@ -1698,6 +1698,17 @@ export const zhCN = {
    'quota.service.error.unrecognized': '上游返回了配额数据，但无法识别',
    'quota.service.error.codexResetOnly': '只有 Codex 凭据支持使用重置额度',
    'quota.service.error.missingConsumeAuthIndex': '缺少 auth-index，无法使用重置额度',
++  'authFiles.export': '导出',
++  'authFiles.exported': '已导出 {name}',
++  'authFiles.exportFailed': '导出失败：{error}',
++  'quota.plugin.pool': '账号池合计',
++  'quota.plugin.poolDetail': '{count} 个账号 · 剩余 {remain} / 共 {size}',
 +  'quota.plugin.packages': '套餐额度',
 +  'quota.plugin.packagesDetail': '剩余 {remain} / 共 {size} · {count} 个套餐包',
 +  'quota.plugin.regionDetail': '剩余 {remain} / 共 {size}',
@@ -124,10 +206,16 @@ index c58df9f..11723ac 100644
  
  export type MessageKey = keyof typeof zhCN;
 diff --git a/src/pages/AuthFileManagementPage.tsx b/src/pages/AuthFileManagementPage.tsx
-index 50c4d08..0948b3d 100644
+index 50c4d08..08333a1 100644
 --- a/src/pages/AuthFileManagementPage.tsx
 +++ b/src/pages/AuthFileManagementPage.tsx
-@@ -30,6 +30,11 @@ import geminiIcon from '../assets/icons/gemini.svg';
+@@ -1,4 +1,5 @@
+ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
++import { save } from '@tauri-apps/plugin-dialog';
+ import { useConfirmation } from '../components/ConfirmationDialog';
+ import { QuotaActionFeedback } from '../components/QuotaActionFeedback';
+ import { AuthFileQuotaPanel } from '../components/AuthFileQuotaPanel';
+@@ -30,9 +31,15 @@ import geminiIcon from '../assets/icons/gemini.svg';
  import grokIcon from '../assets/icons/grok.svg';
  import devinIcon from '../assets/icons/devin.svg';
  import kimiIcon from '../assets/icons/kimi-light.svg';
@@ -139,7 +227,11 @@ index 50c4d08..0948b3d 100644
  import vertexIcon from '../assets/icons/vertex.svg';
  import {
    formatDate,
-@@ -88,6 +93,11 @@ const providerIcons: Record<string, string> = {
++  isRecord,
+   managementApi,
+   readBoolean,
+   readNumber,
+@@ -88,6 +95,86 @@ const providerIcons: Record<string, string> = {
    vertex: vertexIcon,
    xai: grokIcon,
    devin: devinIcon,
@@ -148,9 +240,134 @@ index 50c4d08..0948b3d 100644
 +  qoder: qoderIcon,
 +  zcode: zcodeIcon,
 +  mimo: mimoIcon,
++};
++
++// Third-party exports (for example cockpit-style `workbuddy_accounts_*.json`) ship a
++// JSON array of flat snake_case accounts, while CPA stores one nested camelCase file
++// per credential. Split the array and reshape every entry before uploading it.
++const REGION_BY_DOMAIN: Record<string, string> = {
++  'copilot.tencent.com': 'cn',
++  'codebuddy.cn': 'cn',
++  'www.codebuddy.cn': 'cn',
++  'workbuddy.ai': 'global',
++  'www.workbuddy.ai': 'global',
++  'codebuddy.ai': 'intl',
++  'www.codebuddy.ai': 'intl',
++};
++
++const normalizeImportedCredential = (
++  value: Record<string, unknown>,
++  fallbackProvider: string,
++): Record<string, unknown> => {
++  if (isRecord(value.auth) || isRecord(value.account)) return value;
++  const accessToken = readString(value, 'accessToken', 'access_token');
++  if (!accessToken) return value;
++  const domain = readString(value, 'domain') || 'www.codebuddy.cn';
++  const provider = readString(value, 'provider', 'type', 'account_type') || fallbackProvider;
++  const rawExpiry = value.expiresAt ?? value.expires_at;
++  let expiresAt = 0;
++  if (typeof rawExpiry === 'number' && Number.isFinite(rawExpiry)) {
++    expiresAt = rawExpiry > 10 ** 11 ? Math.floor(rawExpiry / 1000) : Math.floor(rawExpiry);
++  }
++  return {
++    account: {
++      enterpriseId: '',
++      nickname: readString(value, 'nickname', 'name'),
++      uid: readString(value, 'uid', 'user_id'),
++    },
++    auth: {
++      accessToken,
++      refreshToken: readString(value, 'refreshToken', 'refresh_token'),
++      expiresAt,
++      domain,
++      region: readString(value, 'region') || REGION_BY_DOMAIN[domain] || 'cn',
++    },
++    auth_kind: 'oauth',
++    disabled: false,
++    provider,
++    type: provider,
++  };
++};
++
++const importCredentialFile = async (file: File): Promise<number> => {
++  let parsed: unknown = null;
++  try {
++    parsed = JSON.parse(await file.text());
++  } catch {
++    parsed = null;
++  }
++  const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
++  const alreadyCredential =
++    entries.length === 1 && (isRecord(entries[0].auth) || isRecord(entries[0].account));
++  if (parsed === null || entries.length === 0 || alreadyCredential) {
++    await managementApi.uploadAuthFile(file);
++    return 1;
++  }
++  const fallbackProvider = file.name.split(/[_.-]/)[0].toLowerCase();
++  let uploaded = 0;
++  for (const entry of entries) {
++    const normalized = normalizeImportedCredential(entry, fallbackProvider);
++    const provider =
++      readString(normalized, 'provider', 'type', 'account_type') || fallbackProvider || 'credential';
++    const uid = isRecord(normalized.account) ? readString(normalized.account, 'uid') : '';
++    const name = uid ? `${provider}-${uid}.json` : file.name;
++    await managementApi.uploadAuthFileContent(name, JSON.stringify(normalized));
++    uploaded += 1;
++  }
++  return uploaded;
  };
  
  const providerName = (file: AuthFile) => {
+@@ -294,8 +381,7 @@ export function AuthFileManagementPage() {
+     const failures: string[] = [];
+     for (const file of selected) {
+       try {
+-        await managementApi.uploadAuthFile(file);
+-        uploaded += 1;
++        uploaded += await importCredentialFile(file);
+       } catch (requestError) {
+         failures.push(`${file.name}：${String(requestError)}`);
+       }
+@@ -311,6 +397,31 @@ export function AuthFileManagementPage() {
+     }
+   };
+ 
++  const exportFile = async (file: AuthFile) => {
++    feedback.clearNotice();
++    setError('');
++    const name = fileName(file);
++    const source = readString(file, 'path');
++    if (!source) {
++      setError(t('authFiles.exportFailed', { error: t('authFiles.fileOnly') }));
++      return;
++    }
++    setBusy(true);
++    try {
++      const target = await save({
++        defaultPath: name,
++        filters: [{ name: 'JSON', extensions: ['json'] }],
++      });
++      if (!target) return;
++      await managementApi.exportAuthFile(source, target);
++      showNotice({ key: 'authFiles.exported', variables: { name } });
++    } catch (requestError) {
++      setError(t('authFiles.exportFailed', { error: String(requestError) }));
++    } finally {
++      setBusy(false);
++    }
++  };
++
+   const toggleStatus = async (file: AuthFile) => {
+     feedback.clearNotice();
+     setBusy(true);
+@@ -453,6 +564,7 @@ export function AuthFileManagementPage() {
+                     {providerKey(file) ? <button type="button" className="secondary-button compact-button" onClick={() => setModelViewName(name)} disabled={busy} title={t('authFiles.models.viewTitle')}>{t('authFiles.models.button')}</button> : null}
+                     <button type="button" className="icon-button quiet" onClick={() => void copyName(name)} disabled={busy} title={t('authFiles.copyName')} aria-label={t('authFiles.copyName')}>{copied === name ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}</button>
+                     <button type="button" className={`${disabled ? 'primary-button' : 'secondary-button'} compact-button auth-card-toggle`} onClick={() => void toggleStatus(file)} disabled={busy || !isOAuthCredentialFile(file)} title={isOAuthCredentialFile(file) ? undefined : t('authFiles.fileOnly')}>{disabled ? t('common.enable') : t('common.disable')}</button>
++                    <button type="button" className="icon-button quiet" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden="true" /></button>
+                     <button type="button" className="icon-button danger" onClick={() => void deleteFile(file)} disabled={busy || isRuntimeOnly(file)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={15} aria-hidden="true" /></button>
+                   </footer>
+                 </article>
 diff --git a/src/pages/ManagementPages.tsx b/src/pages/ManagementPages.tsx
 index fefaefb..98e5067 100644
 --- a/src/pages/ManagementPages.tsx
@@ -223,8 +440,25 @@ index 861e343..d8366be 100644
  const REFRESH_CONCURRENCY = 4;
  
  export function QuotaPage() {
+diff --git a/src/services/managementApi.ts b/src/services/managementApi.ts
+index fb7dc57..c5fde0b 100644
+--- a/src/services/managementApi.ts
++++ b/src/services/managementApi.ts
+@@ -253,6 +253,12 @@ export const managementApi = {
+       data,
+     });
+   },
++  uploadAuthFileContent: async (name: string, content: string) => {
++    const data = Array.from(new TextEncoder().encode(content));
++    return invoke<ManagementJson>('upload_auth_file', { name, data });
++  },
++  exportAuthFile: (source: string, target: string) =>
++    invoke<void>('export_auth_file', { source, target }),
+   openAuthFilesDirectory: () => invoke<void>('open_auth_files_directory'),
+ };
+ 
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
-index c9b1745..5cf7ba4 100644
+index c9b1745..86049b3 100644
 --- a/src/services/quotaService.ts
 +++ b/src/services/quotaService.ts
 @@ -18,7 +18,14 @@ const quotaText = (
@@ -269,7 +503,7 @@ index c9b1745..5cf7ba4 100644
    if (value === 'x-ai' || value === 'grok') return 'xai';
    if (value === 'cognition') return 'devin';
    if (value === 'anthropic') return 'claude';
-@@ -836,6 +851,83 @@ const callCodexResetCredits = async (
+@@ -836,6 +851,86 @@ const callCodexResetCredits = async (
    return codexResetCreditDetailsFor(payload);
  };
  
@@ -289,11 +523,21 @@ index c9b1745..5cf7ba4 100644
 +  );
 +  if (!isRecord(payload)) throw new Error(quotaText('quota.service.error.noResponse'));
 +  const summary = isRecord(payload.summary) ? payload.summary : {};
-+  const totalSize = pluginNumber(summary.total_size) ?? 0;
-+  const packCount = pluginNumber(summary.pack_count) ?? 0;
++  const accounts = Array.isArray(payload.accounts) ? payload.accounts.filter(isRecord) : [];
++  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);
++  const credentialName = readString(file, 'name', 'auth_id');
++  const own = accounts.find((account) => {
++    const index = normalizeAuthIndex(account.auth_index ?? account.authIndex);
++    if (authIndex && index) return index === authIndex;
++    const id = readString(account, 'auth_id', 'name');
++    return Boolean(credentialName && id && id === credentialName);
++  }) ?? (accounts.length === 1 ? accounts[0] : null);
++  const credits = isRecord(own?.credits) ? (own?.credits as Record<string, unknown>) : null;
++  const totalSize = pluginNumber(credits?.total_size) ?? 0;
++  const totalRemain = pluginNumber(credits?.total_remain) ?? 0;
++  const packCount = pluginNumber(credits?.pack_count) ?? 0;
 +  const rows: QuotaRow[] = [];
 +  if (totalSize > 0) {
-+    const totalRemain = pluginNumber(summary.total_remain) ?? 0;
 +    rows.push({
 +      label: quotaText('quota.plugin.packages'),
 +      remainingPercent: Math.max(0, Math.min(100, (totalRemain / totalSize) * 100)),
@@ -301,32 +545,8 @@ index c9b1745..5cf7ba4 100644
 +        remain: totalRemain, size: totalSize, count: packCount,
 +      }),
 +    });
-+    // Only spell out the region split when more than one region holds quota.
-+    const regions = Object.keys(summary)
-+      .filter((key) => key.endsWith('_size') && key !== 'total_size')
-+      .map((key) => {
-+        const region = key.slice(0, -'_size'.length);
-+        return {
-+          region,
-+          size: pluginNumber(summary[key]) ?? 0,
-+          remain: pluginNumber(summary[`${region}_remain`]) ?? 0,
-+        };
-+      })
-+      .filter((entry) => entry.size > 0);
-+    if (regions.length > 1) {
-+      regions.forEach((entry) => {
-+        rows.push({
-+          label: entry.region.toUpperCase(),
-+          remainingPercent: Math.max(0, Math.min(100, (entry.remain / entry.size) * 100)),
-+          detail: quotaText('quota.plugin.regionDetail', { remain: entry.remain, size: entry.size }),
-+        });
-+      });
-+    }
 +  }
-+  const accounts = Array.isArray(payload.accounts) ? payload.accounts.filter(isRecord) : [];
-+  const checkin = accounts
-+    .map((account) => (isRecord(account.checkin) ? account.checkin : null))
-+    .find((entry) => entry !== null);
++  const checkin = isRecord(own?.checkin) ? (own?.checkin as Record<string, unknown>) : null;
 +  if (checkin) {
 +    const totalCredits = pluginNumber(checkin.total_credits) ?? 0;
 +    if (totalCredits > 0) {
@@ -341,11 +561,28 @@ index c9b1745..5cf7ba4 100644
 +      });
 +    }
 +  }
++  // The plugin answers with every account it owns; keep the pooled totals as a
++  // trailing row so a multi-account pool stays visible from any credential.
++  const poolSize = pluginNumber(summary.total_size) ?? 0;
++  if (poolSize > 0 && accounts.length > 1) {
++    const poolRemain = pluginNumber(summary.total_remain) ?? 0;
++    rows.push({
++      label: quotaText('quota.plugin.pool'),
++      remainingPercent: Math.max(0, Math.min(100, (poolRemain / poolSize) * 100)),
++      detail: quotaText('quota.plugin.poolDetail', {
++        count: accounts.length, remain: poolRemain, size: poolSize,
++      }),
++    });
++  }
 +  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));
 +  return {
 +    status: 'success',
 +    rows,
-+    plan: packCount > 0 ? quotaText('quota.plugin.packCount', { count: packCount }) : undefined,
++    plan: own && readString(own, 'nickname')
++      ? readString(own, 'nickname')
++      : packCount > 0
++        ? quotaText('quota.plugin.packCount', { count: packCount })
++        : undefined,
 +    fetchedAt: Date.now(),
 +  };
 +}
@@ -353,7 +590,7 @@ index c9b1745..5cf7ba4 100644
  async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    const provider = providerForFile(file);
    if (!provider) {
-@@ -847,6 +939,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+@@ -847,6 +942,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    }
    try {
      if (booleanValue(file.disabled) === true) throw new Error(quotaText('quota.fileDisabled'));

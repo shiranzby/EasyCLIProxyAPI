@@ -301,23 +301,444 @@ QUOTA_MESSAGES = {
     ],
 }
 
+# The anchor must be matched as a whole line: the key also occurs mid-line inside
+# the message values, and replacing there would split the entry in half.
 ANCHOR = "'quota.service.error.missingConsumeAuthIndex'"
-for path, lines in QUOTA_MESSAGES.items():
+
+
+def append_messages(path, lines):
     full = os.path.join(ROOT, path)
     with open(full, 'r', encoding='utf-8', newline='') as handle:
         text = handle.read()
     if lines[0] in text:
         print('  already applied in %s' % path)
-        continue
-    anchor_lines = [line for line in text.splitlines() if line.strip().startswith(ANCHOR)]
-    if len(anchor_lines) != 1:
-        raise SystemExit('AMBIGUOUS ANCHOR in %s (%d matches)' % (path, len(anchor_lines)))
-    anchor = anchor_lines[0]
-    addendum = ''.join('  ' + line + '\n' for line in lines)
-    text = text.replace(anchor, anchor + '\n' + addendum.rstrip('\n'), 1)
+        return
+    matches = [line for line in text.splitlines() if line.strip().startswith(ANCHOR)]
+    if len(matches) != 1:
+        raise SystemExit('AMBIGUOUS ANCHOR in %s (%d matches)' % (path, len(matches)))
+    addendum = ''.join('  ' + line + '\n' for line in lines).rstrip('\n')
+    text = text.replace(matches[0], matches[0] + '\n' + addendum, 1)
     with open(full, 'w', encoding='utf-8', newline='') as handle:
         handle.write(text)
     print('patched %s (messages)' % path)
+
+
+for path, lines in QUOTA_MESSAGES.items():
+    append_messages(path, lines)
+
+# --- Per-account plugin quota ------------------------------------------------
+# `POST /plugins/<id>/refresh` returns every account of that plugin, so the first
+# version showed the pooled total on every credential. Match the credential back to
+# its account entry and render that account's own numbers instead.
+
+replace('src/services/quotaService.ts', [
+    (
+        "  const summary = isRecord(payload.summary) ? payload.summary : {};\n"
+        "  const totalSize = pluginNumber(summary.total_size) ?? 0;\n"
+        "  const packCount = pluginNumber(summary.pack_count) ?? 0;\n"
+        "  const rows: QuotaRow[] = [];\n"
+        "  if (totalSize > 0) {\n"
+        "    const totalRemain = pluginNumber(summary.total_remain) ?? 0;\n"
+        "    rows.push({\n"
+        "      label: quotaText('quota.plugin.packages'),\n"
+        "      remainingPercent: Math.max(0, Math.min(100, (totalRemain / totalSize) * 100)),\n"
+        "      detail: quotaText('quota.plugin.packagesDetail', {\n"
+        "        remain: totalRemain, size: totalSize, count: packCount,\n"
+        "      }),\n"
+        "    });\n"
+        "    // Only spell out the region split when more than one region holds quota.\n"
+        "    const regions = Object.keys(summary)\n"
+        "      .filter((key) => key.endsWith('_size') && key !== 'total_size')\n"
+        "      .map((key) => {\n"
+        "        const region = key.slice(0, -'_size'.length);\n"
+        "        return {\n"
+        "          region,\n"
+        "          size: pluginNumber(summary[key]) ?? 0,\n"
+        "          remain: pluginNumber(summary[`${region}_remain`]) ?? 0,\n"
+        "        };\n"
+        "      })\n"
+        "      .filter((entry) => entry.size > 0);\n"
+        "    if (regions.length > 1) {\n"
+        "      regions.forEach((entry) => {\n"
+        "        rows.push({\n"
+        "          label: entry.region.toUpperCase(),\n"
+        "          remainingPercent: Math.max(0, Math.min(100, (entry.remain / entry.size) * 100)),\n"
+        "          detail: quotaText('quota.plugin.regionDetail', { remain: entry.remain, size: entry.size }),\n"
+        "        });\n"
+        "      });\n"
+        "    }\n"
+        "  }\n"
+        "  const accounts = Array.isArray(payload.accounts) ? payload.accounts.filter(isRecord) : [];\n"
+        "  const checkin = accounts\n"
+        "    .map((account) => (isRecord(account.checkin) ? account.checkin : null))\n"
+        "    .find((entry) => entry !== null);\n"
+        "  if (checkin) {\n"
+        "    const totalCredits = pluginNumber(checkin.total_credits) ?? 0;\n"
+        "    if (totalCredits > 0) {\n"
+        "      rows.push({\n"
+        "        label: quotaText('quota.plugin.checkin'),\n"
+        "        remainingPercent: null,\n"
+        "        detail: quotaText('quota.plugin.checkinDetail', {\n"
+        "          today: pluginNumber(checkin.today_credit) ?? 0,\n"
+        "          total: totalCredits,\n"
+        "          streak: pluginNumber(checkin.streak_days) ?? 0,\n"
+        "        }),\n"
+        "      });\n"
+        "    }\n"
+        "  }\n"
+        "  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));\n"
+        "  return {\n"
+        "    status: 'success',\n"
+        "    rows,\n"
+        "    plan: packCount > 0 ? quotaText('quota.plugin.packCount', { count: packCount }) : undefined,\n"
+        "    fetchedAt: Date.now(),\n"
+        "  };\n"
+        "}",
+        "  const summary = isRecord(payload.summary) ? payload.summary : {};\n"
+        "  const accounts = Array.isArray(payload.accounts) ? payload.accounts.filter(isRecord) : [];\n"
+        "  const authIndex = normalizeAuthIndex(file.auth_index ?? file.authIndex);\n"
+        "  const credentialName = readString(file, 'name', 'auth_id');\n"
+        "  const own = accounts.find((account) => {\n"
+        "    const index = normalizeAuthIndex(account.auth_index ?? account.authIndex);\n"
+        "    if (authIndex && index) return index === authIndex;\n"
+        "    const id = readString(account, 'auth_id', 'name');\n"
+        "    return Boolean(credentialName && id && id === credentialName);\n"
+        "  }) ?? (accounts.length === 1 ? accounts[0] : null);\n"
+        "  const credits = isRecord(own?.credits) ? (own?.credits as Record<string, unknown>) : null;\n"
+        "  const totalSize = pluginNumber(credits?.total_size) ?? 0;\n"
+        "  const totalRemain = pluginNumber(credits?.total_remain) ?? 0;\n"
+        "  const packCount = pluginNumber(credits?.pack_count) ?? 0;\n"
+        "  const rows: QuotaRow[] = [];\n"
+        "  if (totalSize > 0) {\n"
+        "    rows.push({\n"
+        "      label: quotaText('quota.plugin.packages'),\n"
+        "      remainingPercent: Math.max(0, Math.min(100, (totalRemain / totalSize) * 100)),\n"
+        "      detail: quotaText('quota.plugin.packagesDetail', {\n"
+        "        remain: totalRemain, size: totalSize, count: packCount,\n"
+        "      }),\n"
+        "    });\n"
+        "  }\n"
+        "  const checkin = isRecord(own?.checkin) ? (own?.checkin as Record<string, unknown>) : null;\n"
+        "  if (checkin) {\n"
+        "    const totalCredits = pluginNumber(checkin.total_credits) ?? 0;\n"
+        "    if (totalCredits > 0) {\n"
+        "      rows.push({\n"
+        "        label: quotaText('quota.plugin.checkin'),\n"
+        "        remainingPercent: null,\n"
+        "        detail: quotaText('quota.plugin.checkinDetail', {\n"
+        "          today: pluginNumber(checkin.today_credit) ?? 0,\n"
+        "          total: totalCredits,\n"
+        "          streak: pluginNumber(checkin.streak_days) ?? 0,\n"
+        "        }),\n"
+        "      });\n"
+        "    }\n"
+        "  }\n"
+        "  // The plugin answers with every account it owns; keep the pooled totals as a\n"
+        "  // trailing row so a multi-account pool stays visible from any credential.\n"
+        "  const poolSize = pluginNumber(summary.total_size) ?? 0;\n"
+        "  if (poolSize > 0 && accounts.length > 1) {\n"
+        "    const poolRemain = pluginNumber(summary.total_remain) ?? 0;\n"
+        "    rows.push({\n"
+        "      label: quotaText('quota.plugin.pool'),\n"
+        "      remainingPercent: Math.max(0, Math.min(100, (poolRemain / poolSize) * 100)),\n"
+        "      detail: quotaText('quota.plugin.poolDetail', {\n"
+        "        count: accounts.length, remain: poolRemain, size: poolSize,\n"
+        "      }),\n"
+        "    });\n"
+        "  }\n"
+        "  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));\n"
+        "  return {\n"
+        "    status: 'success',\n"
+        "    rows,\n"
+        "    plan: own && readString(own, 'nickname')\n"
+        "      ? readString(own, 'nickname')\n"
+        "      : packCount > 0\n"
+        "        ? quotaText('quota.plugin.packCount', { count: packCount })\n"
+        "        : undefined,\n"
+        "    fetchedAt: Date.now(),\n"
+        "  };\n"
+        "}",
+    ),
+])
+
+# --- Credential import: accept third-party exports, and export a credential ----
+
+replace('src/services/managementApi.ts', [
+    (
+        "  uploadAuthFile: async (file: File) => {\n"
+        "    const data = Array.from(new Uint8Array(await file.arrayBuffer()));\n"
+        "    return invoke<ManagementJson>('upload_auth_file', {\n"
+        "      name: file.name,\n"
+        "      data,\n"
+        "    });\n"
+        "  },",
+        "  uploadAuthFile: async (file: File) => {\n"
+        "    const data = Array.from(new Uint8Array(await file.arrayBuffer()));\n"
+        "    return invoke<ManagementJson>('upload_auth_file', {\n"
+        "      name: file.name,\n"
+        "      data,\n"
+        "    });\n"
+        "  },\n"
+        "  uploadAuthFileContent: async (name: string, content: string) => {\n"
+        "    const data = Array.from(new TextEncoder().encode(content));\n"
+        "    return invoke<ManagementJson>('upload_auth_file', { name, data });\n"
+        "  },\n"
+        "  exportAuthFile: (source: string, target: string) =>\n"
+        "    invoke<void>('export_auth_file', { source, target }),",
+    ),
+])
+
+replace('src-tauri/src/management_api.rs', [
+    (
+        "use std::{\n"
+        "    collections::HashMap,\n"
+        "    error::Error,\n"
+        "    fs,\n"
+        "    path::Path,\n"
+        "    process::{Command, Stdio},\n"
+        "    sync::LazyLock,\n"
+        "    time::Duration,\n"
+        "};",
+        "use std::{\n"
+        "    collections::HashMap,\n"
+        "    error::Error,\n"
+        "    fs,\n"
+        "    path::{Path, PathBuf},\n"
+        "    process::{Command, Stdio},\n"
+        "    sync::LazyLock,\n"
+        "    time::Duration,\n"
+        "};",
+    ),
+    (
+        "#[tauri::command]\npub(crate) fn open_auth_files_directory(",
+        "#[tauri::command]\n"
+        "pub(crate) fn export_auth_file(source: String, target: String) -> Result<(), String> {\n"
+        "    let install_dir = core_install_dir()?;\n"
+        "    let candidate = PathBuf::from(source.trim());\n"
+        "    // The credentials list reports paths relative to the core install directory.\n"
+        "    let source_path = if candidate.is_absolute() {\n"
+        "        candidate\n"
+        "    } else {\n"
+        "        install_dir.join(candidate)\n"
+        "    };\n"
+        "    if !source_path.is_file() {\n"
+        "        return Err(format!(\n"
+        "            \"Credential file not found: {}\",\n"
+        "            path_to_string(&source_path)\n"
+        "        ));\n"
+        "    }\n"
+        "    let target_path = PathBuf::from(target.trim());\n"
+        "    if target_path.as_os_str().is_empty() {\n"
+        "        return Err(\"Credential export target is empty\".to_string());\n"
+        "    }\n"
+        "    fs::copy(&source_path, &target_path).map_err(|error| {\n"
+        "        format!(\n"
+        "            \"Failed to copy {} to {}: {error}\",\n"
+        "            path_to_string(&source_path),\n"
+        "            path_to_string(&target_path)\n"
+        "        )\n"
+        "    })?;\n"
+        "    Ok(())\n"
+        "}\n"
+        "\n"
+        "#[tauri::command]\npub(crate) fn open_auth_files_directory(",
+    ),
+])
+
+replace('src-tauri/src/main.rs', [
+    (
+        "            management_api::upload_auth_file,",
+        "            management_api::upload_auth_file,\n            management_api::export_auth_file,",
+    ),
+])
+
+replace('src-tauri/capabilities/default.json', [
+    ('    "dialog:allow-open"', '    "dialog:allow-open",\n    "dialog:allow-save"'),
+])
+
+replace('src/pages/AuthFileManagementPage.tsx', [
+    (
+        "import {\n"
+        "  formatDate,\n"
+        "  managementApi,\n"
+        "  readBoolean,\n"
+        "  readNumber,\n"
+        "  readString,\n"
+        "  responseList,\n"
+        "} from '../services/managementApi';",
+        "import {\n"
+        "  formatDate,\n"
+        "  isRecord,\n"
+        "  managementApi,\n"
+        "  readBoolean,\n"
+        "  readNumber,\n"
+        "  readString,\n"
+        "  responseList,\n"
+        "} from '../services/managementApi';",
+    ),
+    (
+        "  mimo: mimoIcon,\n};",
+        "  mimo: mimoIcon,\n};\n"
+        "\n"
+        "// Third-party exports (for example cockpit-style `workbuddy_accounts_*.json`) ship a\n"
+        "// JSON array of flat snake_case accounts, while CPA stores one nested camelCase file\n"
+        "// per credential. Split the array and reshape every entry before uploading it.\n"
+        "const REGION_BY_DOMAIN: Record<string, string> = {\n"
+        "  'copilot.tencent.com': 'cn',\n"
+        "  'codebuddy.cn': 'cn',\n"
+        "  'www.codebuddy.cn': 'cn',\n"
+        "  'workbuddy.ai': 'global',\n"
+        "  'www.workbuddy.ai': 'global',\n"
+        "  'codebuddy.ai': 'intl',\n"
+        "  'www.codebuddy.ai': 'intl',\n"
+        "};\n"
+        "\n"
+        "const normalizeImportedCredential = (\n"
+        "  value: Record<string, unknown>,\n"
+        "  fallbackProvider: string,\n"
+        "): Record<string, unknown> => {\n"
+        "  if (isRecord(value.auth) || isRecord(value.account)) return value;\n"
+        "  const accessToken = readString(value, 'accessToken', 'access_token');\n"
+        "  if (!accessToken) return value;\n"
+        "  const domain = readString(value, 'domain') || 'www.codebuddy.cn';\n"
+        "  const provider = readString(value, 'provider', 'type', 'account_type') || fallbackProvider;\n"
+        "  const rawExpiry = value.expiresAt ?? value.expires_at;\n"
+        "  let expiresAt = 0;\n"
+        "  if (typeof rawExpiry === 'number' && Number.isFinite(rawExpiry)) {\n"
+        "    expiresAt = rawExpiry > 10 ** 11 ? Math.floor(rawExpiry / 1000) : Math.floor(rawExpiry);\n"
+        "  }\n"
+        "  return {\n"
+        "    account: {\n"
+        "      enterpriseId: '',\n"
+        "      nickname: readString(value, 'nickname', 'name'),\n"
+        "      uid: readString(value, 'uid', 'user_id'),\n"
+        "    },\n"
+        "    auth: {\n"
+        "      accessToken,\n"
+        "      refreshToken: readString(value, 'refreshToken', 'refresh_token'),\n"
+        "      expiresAt,\n"
+        "      domain,\n"
+        "      region: readString(value, 'region') || REGION_BY_DOMAIN[domain] || 'cn',\n"
+        "    },\n"
+        "    auth_kind: 'oauth',\n"
+        "    disabled: false,\n"
+        "    provider,\n"
+        "    type: provider,\n"
+        "  };\n"
+        "};\n"
+        "\n"
+        "const importCredentialFile = async (file: File): Promise<number> => {\n"
+        "  let parsed: unknown = null;\n"
+        "  try {\n"
+        "    parsed = JSON.parse(await file.text());\n"
+        "  } catch {\n"
+        "    parsed = null;\n"
+        "  }\n"
+        "  const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);\n"
+        "  const alreadyCredential =\n"
+        "    entries.length === 1 && (isRecord(entries[0].auth) || isRecord(entries[0].account));\n"
+        "  if (parsed === null || entries.length === 0 || alreadyCredential) {\n"
+        "    await managementApi.uploadAuthFile(file);\n"
+        "    return 1;\n"
+        "  }\n"
+        "  const fallbackProvider = file.name.split(/[_.-]/)[0].toLowerCase();\n"
+        "  let uploaded = 0;\n"
+        "  for (const entry of entries) {\n"
+        "    const normalized = normalizeImportedCredential(entry, fallbackProvider);\n"
+        "    const provider =\n"
+        "      readString(normalized, 'provider', 'type', 'account_type') || fallbackProvider || 'credential';\n"
+        "    const uid = isRecord(normalized.account) ? readString(normalized.account, 'uid') : '';\n"
+        "    const name = uid ? `${provider}-${uid}.json` : file.name;\n"
+        "    await managementApi.uploadAuthFileContent(name, JSON.stringify(normalized));\n"
+        "    uploaded += 1;\n"
+        "  }\n"
+        "  return uploaded;\n"
+        "};",
+    ),
+    (
+        "    for (const file of selected) {\n"
+        "      try {\n"
+        "        await managementApi.uploadAuthFile(file);\n"
+        "        uploaded += 1;\n"
+        "      } catch (requestError) {\n"
+        "        failures.push(`${file.name}：${String(requestError)}`);\n"
+        "      }\n"
+        "    }",
+        "    for (const file of selected) {\n"
+        "      try {\n"
+        "        uploaded += await importCredentialFile(file);\n"
+        "      } catch (requestError) {\n"
+        "        failures.push(`${file.name}：${String(requestError)}`);\n"
+        "      }\n"
+        "    }",
+    ),
+    (
+        "  const toggleStatus = async (file: AuthFile) => {",
+        "  const exportFile = async (file: AuthFile) => {\n"
+        "    feedback.clearNotice();\n"
+        "    setError('');\n"
+        "    const name = fileName(file);\n"
+        "    const source = readString(file, 'path');\n"
+        "    if (!source) {\n"
+        "      setError(t('authFiles.exportFailed', { error: t('authFiles.fileOnly') }));\n"
+        "      return;\n"
+        "    }\n"
+        "    setBusy(true);\n"
+        "    try {\n"
+        "      const target = await save({\n"
+        "        defaultPath: name,\n"
+        "        filters: [{ name: 'JSON', extensions: ['json'] }],\n"
+        "      });\n"
+        "      if (!target) return;\n"
+        "      await managementApi.exportAuthFile(source, target);\n"
+        "      showNotice({ key: 'authFiles.exported', variables: { name } });\n"
+        "    } catch (requestError) {\n"
+        "      setError(t('authFiles.exportFailed', { error: String(requestError) }));\n"
+        "    } finally {\n"
+        "      setBusy(false);\n"
+        "    }\n"
+        "  };\n"
+        "\n"
+        "  const toggleStatus = async (file: AuthFile) => {",
+    ),
+    (
+        "                    <button type=\"button\" className=\"icon-button danger\" onClick={() => void deleteFile(file)}",
+        "                    <button type=\"button\" className=\"icon-button quiet\" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden=\"true\" /></button>\n"
+        "                    <button type=\"button\" className=\"icon-button danger\" onClick={() => void deleteFile(file)}",
+    ),
+    (
+        "import { useConfirmation } from '../components/ConfirmationDialog';",
+        "import { save } from '@tauri-apps/plugin-dialog';\n"
+        "import { useConfirmation } from '../components/ConfirmationDialog';",
+    ),
+])
+
+AUTH_FILE_MESSAGES = {
+    'src/i18n/locales/zh-CN.ts': [
+        ("'authFiles.export': '导出',"),
+        ("'authFiles.exported': '已导出 {name}',"),
+        ("'authFiles.exportFailed': '导出失败：{error}',"),
+        ("'quota.plugin.pool': '账号池合计',"),
+        ("'quota.plugin.poolDetail': '{count} 个账号 · 剩余 {remain} / 共 {size}',"),
+    ],
+    'src/i18n/locales/en.ts': [
+        ("'authFiles.export': 'Export',"),
+        ("'authFiles.exported': 'Exported {name}',"),
+        ("'authFiles.exportFailed': 'Export failed: {error}',"),
+        ("'quota.plugin.pool': 'All accounts',"),
+        ("'quota.plugin.poolDetail': '{count} accounts · {remain} of {size} left',"),
+    ],
+    'src/i18n/ja.ts': [
+        ("'authFiles.export': 'エクスポート',"),
+        ("'authFiles.exported': '{name} をエクスポートしました',"),
+        ("'authFiles.exportFailed': 'エクスポートに失敗: {error}',"),
+        ("'quota.plugin.pool': '全アカウント合計',"),
+        ("'quota.plugin.poolDetail': '{count} アカウント · 残り {remain} / {size}',"),
+    ],
+}
+
+for path, lines in AUTH_FILE_MESSAGES.items():
+    append_messages(path, lines)
 
 SVG_TITLE = '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>%s</title>%s</svg>\n'
 
