@@ -20,6 +20,7 @@ with third-party CPA plugins bundled in.
 | `src-tauri/src/main.rs` | `APP_UPDATE_MANIFEST_URL` (3 platforms) and `APP_RELEASE_DOWNLOAD_PREFIX` point at this fork. The core constants (`RELEASE_PAGE_URL`, `RELEASE_ATOM_URL`, `RELEASE_DOWNLOAD_PREFIX`) stay on the official CLIProxyAPI repo, so kernel updates remain upstream's. |
 | `src-tauri/src/app_update.rs` | The trusted `release_url` path prefix is changed to this fork, otherwise the client rejects the manifest with "Untrusted application update release URL". |
 | `src/pages/ManagementPages.tsx` | Adds WorkBuddy / Trae / Qoder / ZCode / MiMo cards to the OAuth page. The Rust commands (`start_oauth_login`, `get_oauth_status`, `submit_oauth_callback`) are already provider-agnostic, so no Rust change is needed. |
+| `src/pages/AuthFileManagementPage.tsx` | The credential card icon map falls back to the Gemini icon for unknown providers; the five plugin providers are registered so their own icons are used. |
 | `src/assets/icons/{trae,qoder,mimo}.svg` | Icons for the new cards (`workbuddy.png` and `zcode.png` already exist in the repo). |
 
 ## Regenerating the patch after an upstream change

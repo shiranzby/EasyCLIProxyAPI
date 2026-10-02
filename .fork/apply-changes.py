@@ -8,13 +8,20 @@ def replace(path, pairs):
     full = os.path.join(ROOT, path)
     with open(full, 'r', encoding='utf-8', newline='') as handle:
         text = handle.read()
+    # The repository mixes LF and CRLF files; match whichever the target uses.
+    eol = '\r\n' if '\r\n' in text else '\n'
     for old, new in pairs:
+        old = old.replace('\n', eol)
+        new = new.replace('\n', eol)
         if old not in text:
+            if new in text:
+                print('  already applied in %s' % path)
+                continue
             raise SystemExit('PATTERN NOT FOUND in %s:\n%s' % (path, old[:200]))
         text = text.replace(old, new, 1)
     with open(full, 'w', encoding='utf-8', newline='') as handle:
         handle.write(text)
-    print('patched', path)
+    print('patched %s (%s)' % (path, 'crlf' if eol == '\r\n' else 'lf'))
 
 OLD_REPO = 'router-for-me/EasyCLIProxyAPI'
 NEW_REPO = 'shiranzby/EasyCLIProxyAPI'
@@ -63,6 +70,44 @@ replace('src/pages/ManagementPages.tsx', [
      "  { id: 'zcode' as const, name: 'ZCode OAuth', icon: zcodeIcon },\n"
      "  { id: 'mimo' as const, name: 'MiMo OAuth', icon: mimoIcon },\n"
      "];"),
+])
+
+PLUGIN_ICON_IMPORTS = (
+    "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
+    "import traeIcon from '../assets/icons/trae.svg';\n"
+    "import qoderIcon from '../assets/icons/qoder.svg';\n"
+    "import zcodeIcon from '../assets/icons/zcode.png';\n"
+    "import mimoIcon from '../assets/icons/mimo.svg';"
+)
+
+replace('src/pages/AuthFileManagementPage.tsx', [
+    ("import kimiIcon from '../assets/icons/kimi-light.svg';",
+     "import kimiIcon from '../assets/icons/kimi-light.svg';\n" + PLUGIN_ICON_IMPORTS),
+    ("const providerIcons: Record<string, string> = {\n"
+     "  antigravity: antigravityIcon,\n"
+     "  claude: claudeIcon,\n"
+     "  codex: codexIcon,\n"
+     "  gemini: geminiIcon,\n"
+     "  kimi: kimiIcon,\n"
+     "  vertex: vertexIcon,\n"
+     "  xai: grokIcon,\n"
+     "  devin: devinIcon,\n"
+     "};",
+     "const providerIcons: Record<string, string> = {\n"
+     "  antigravity: antigravityIcon,\n"
+     "  claude: claudeIcon,\n"
+     "  codex: codexIcon,\n"
+     "  gemini: geminiIcon,\n"
+     "  kimi: kimiIcon,\n"
+     "  vertex: vertexIcon,\n"
+     "  xai: grokIcon,\n"
+     "  devin: devinIcon,\n"
+     "  workbuddy: workbuddyIcon,\n"
+     "  trae: traeIcon,\n"
+     "  qoder: qoderIcon,\n"
+     "  zcode: zcodeIcon,\n"
+     "  mimo: mimoIcon,\n"
+     "};"),
 ])
 
 SVG_TITLE = '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>%s</title>%s</svg>\n'

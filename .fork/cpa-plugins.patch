@@ -54,6 +54,34 @@ index 0000000..a64bd48
 +++ b/src/assets/icons/trae.svg
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Trae</title><path d="M7 6h10v2.2H7V6zm3.9 0h2.2v12h-2.2V6z"/></svg>
+diff --git a/src/pages/AuthFileManagementPage.tsx b/src/pages/AuthFileManagementPage.tsx
+index 50c4d08..0948b3d 100644
+--- a/src/pages/AuthFileManagementPage.tsx
++++ b/src/pages/AuthFileManagementPage.tsx
+@@ -30,6 +30,11 @@ import geminiIcon from '../assets/icons/gemini.svg';
+ import grokIcon from '../assets/icons/grok.svg';
+ import devinIcon from '../assets/icons/devin.svg';
+ import kimiIcon from '../assets/icons/kimi-light.svg';
++import workbuddyIcon from '../assets/icons/workbuddy.png';
++import traeIcon from '../assets/icons/trae.svg';
++import qoderIcon from '../assets/icons/qoder.svg';
++import zcodeIcon from '../assets/icons/zcode.png';
++import mimoIcon from '../assets/icons/mimo.svg';
+ import vertexIcon from '../assets/icons/vertex.svg';
+ import {
+   formatDate,
+@@ -88,6 +93,11 @@ const providerIcons: Record<string, string> = {
+   vertex: vertexIcon,
+   xai: grokIcon,
+   devin: devinIcon,
++  workbuddy: workbuddyIcon,
++  trae: traeIcon,
++  qoder: qoderIcon,
++  zcode: zcodeIcon,
++  mimo: mimoIcon,
+ };
+ 
+ const providerName = (file: AuthFile) => {
 diff --git a/src/pages/ManagementPages.tsx b/src/pages/ManagementPages.tsx
 index fefaefb..98e5067 100644
 --- a/src/pages/ManagementPages.tsx
