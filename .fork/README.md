@@ -53,6 +53,32 @@ plugin panel API directly, which shares one payload shape across providers:
 The plugin panel remains the authoritative view
 (`/v0/resource/plugins/<id>/panel`); these rows are a convenience mirror of it.
 
+## Model naming: what `-f` and `-x` mean
+
+Measured against the account catalog
+(`GET https://<cn-host>/console/enterprises/personal/models`, UA must be `CodeBuddy/2.108.1`;
+`CLI/2.137.1` is rejected with `code 12403 check ua`) and the plugin's advertised list
+(`GET /v1/models`).
+
+| id | advertised by the plugin | upstream fields | what it is |
+| --- | --- | --- | --- |
+| `hy4-preview-f` | **yes** | 1M context (= upstream `maxAllowedSize`), 64K output, thinking `high` only | **the id to use for Hy4 today** |
+| `hy4-preview` | no → `400 unknown provider for model` | 960K input / 1M cap, 64K output, `x0.29` credits | the same model; the plugin advertises it under the `-f` name |
+| `hy4-preview-x` | no → `500 code 11102` on this account | same fields as `hy4-preview`, but no promo tags | a second line for the same model; not registered for this account |
+| `hy3` | **yes** | 192K context, thinking fixed `high`, `x0.00 credits` (limited-time free) | |
+| `hy3-x` | **yes** | 192K context, thinking selectable `low`/`high`, `x0.05` credits, temperature 0.9 | same model, different billing route and newer reasoning schema |
+
+So `-x` is **not** a longer-context variant: `hy3` and `hy3-x` have identical context, output
+limits, image and tool support. The differences are the billing multiplier, the reasoning schema
+(single fixed effort vs. selectable efforts), the sampling defaults and the promo tags — i.e. a
+second quota route for the same model. `-f` is not an upstream id at all: it is the name the
+plugin advertises for `hy4-preview`.
+
+Two catalogs exist and they do not agree: the account catalog (queried with the credential token)
+lists ~30 models, while the plugin advertises only 13 of them. `/models/groups?refresh=1` forces a
+live rediscovery and still returns 13, so the narrowing comes from the plugin's catalog filter,
+not from the account's permissions or from upstream retiring models.
+
 ## Regenerating the patch after an upstream change
 
 ```bash
