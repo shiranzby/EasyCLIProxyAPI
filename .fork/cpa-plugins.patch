@@ -33,6 +33,21 @@ index dca3d5a..4a26f4e 100644
  #[cfg(windows)]
  const APP_UPDATE_MANIFEST_NAME: &str = "portable-update-windows.json";
  #[cfg(target_os = "linux")]
+diff --git a/src-tauri/src/management_api.rs b/src-tauri/src/management_api.rs
+index 93b85b8..eece0e6 100644
+--- a/src-tauri/src/management_api.rs
++++ b/src-tauri/src/management_api.rs
+@@ -352,6 +352,10 @@ pub(crate) fn management_endpoint(config: &GuiConfigFile, path: &str) -> Result<
+         config.port,
+         current_core_tls_settings()?.enabled,
+     );
++    // Plugin panel routes and the plugin quota API are only served on the v0 mux.
++    if let Some(rest) = path.strip_prefix("v0/") {
++        return Ok(format!("{origin}/v0/{rest}"));
++    }
+     Ok(format!("{origin}/v8/management/{path}"))
+ }
+ 
 diff --git a/src/assets/icons/mimo.svg b/src/assets/icons/mimo.svg
 new file mode 100644
 index 0000000..71d0dc0
@@ -40,6 +55,13 @@ index 0000000..71d0dc0
 +++ b/src/assets/icons/mimo.svg
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>MiMo</title><path d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 3.2a5.8 5.8 0 110 11.6 5.8 5.8 0 010-11.6z" /><path d="M12 9.6a2.4 2.4 0 100 4.8 2.4 2.4 0 000-4.8z"/></svg>
+diff --git a/src/assets/icons/plugin.svg b/src/assets/icons/plugin.svg
+new file mode 100644
+index 0000000..8f1402f
+--- /dev/null
++++ b/src/assets/icons/plugin.svg
+@@ -0,0 +1 @@
++<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Plugins</title><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
 diff --git a/src/assets/icons/qoder.svg b/src/assets/icons/qoder.svg
 new file mode 100644
 index 0000000..1e97169
@@ -54,6 +76,53 @@ index 0000000..a64bd48
 +++ b/src/assets/icons/trae.svg
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Trae</title><path d="M7 6h10v2.2H7V6zm3.9 0h2.2v12h-2.2V6z"/></svg>
+diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
+index 3052237..10ba20c 100644
+--- a/src/i18n/ja.ts
++++ b/src/i18n/ja.ts
+@@ -1699,4 +1699,10 @@ export const jaOverrides = {
+   'quota.service.error.unrecognized': '上流からクォータデータが返されましたが、形式を認識できません',
+   'quota.service.error.codexResetOnly': 'リセットクォータを使用できるのは Codex 認証情報のみです',
+   'quota.service.error.missingConsumeAuthIndex': 'auth-index がないためリセットクォータを使用できません',
++  'quota.plugin.packages': 'パッケージ枠',
++  'quota.plugin.packagesDetail': '残り {remain} / {size} · {count} パッケージ',
++  'quota.plugin.regionDetail': '残り {remain} / {size}',
++  'quota.plugin.packCount': '{count} パッケージ',
++  'quota.plugin.checkin': 'チェックイン積分',
++  'quota.plugin.checkinDetail': '本日 +{today} · 累計 {total} · {streak} 日連続',
+ } satisfies Record<MessageKey, string>;
+diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
+index 62dc510..5ffe572 100644
+--- a/src/i18n/locales/en.ts
++++ b/src/i18n/locales/en.ts
+@@ -1699,4 +1699,10 @@ export const en: Record<MessageKey, string> = {
+   'quota.service.error.unrecognized': 'Upstream returned quota data in an unrecognized format',
+   'quota.service.error.codexResetOnly': 'Only Codex credentials support reset credits',
+   'quota.service.error.missingConsumeAuthIndex': 'Missing auth-index; the reset credit cannot be used',
++  'quota.plugin.packages': 'Package quota',
++  'quota.plugin.packagesDetail': '{remain} of {size} left · {count} packages',
++  'quota.plugin.regionDetail': '{remain} of {size} left',
++  'quota.plugin.packCount': '{count} packages',
++  'quota.plugin.checkin': 'Check-in credits',
++  'quota.plugin.checkinDetail': '+{today} today · {total} total · {streak} day streak',
+ };
+diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
+index c58df9f..11723ac 100644
+--- a/src/i18n/locales/zh-CN.ts
++++ b/src/i18n/locales/zh-CN.ts
+@@ -1698,6 +1698,12 @@ export const zhCN = {
+   'quota.service.error.unrecognized': '上游返回了配额数据，但无法识别',
+   'quota.service.error.codexResetOnly': '只有 Codex 凭据支持使用重置额度',
+   'quota.service.error.missingConsumeAuthIndex': '缺少 auth-index，无法使用重置额度',
++  'quota.plugin.packages': '套餐额度',
++  'quota.plugin.packagesDetail': '剩余 {remain} / 共 {size} · {count} 个套餐包',
++  'quota.plugin.regionDetail': '剩余 {remain} / 共 {size}',
++  'quota.plugin.packCount': '{count} 个套餐包',
++  'quota.plugin.checkin': '签到积分',
++  'quota.plugin.checkinDetail': '今日 +{today} · 累计 {total} · 连续 {streak} 天',
+ } as const;
+ 
+ export type MessageKey = keyof typeof zhCN;
 diff --git a/src/pages/AuthFileManagementPage.tsx b/src/pages/AuthFileManagementPage.tsx
 index 50c4d08..0948b3d 100644
 --- a/src/pages/AuthFileManagementPage.tsx
@@ -130,3 +199,165 @@ index fefaefb..98e5067 100644
  ];
  
  const OAUTH_CALLBACK_SUPPORTED = new Set<OAuthProviderId>([
+diff --git a/src/pages/QuotaPage.tsx b/src/pages/QuotaPage.tsx
+index 861e343..d8366be 100644
+--- a/src/pages/QuotaPage.tsx
++++ b/src/pages/QuotaPage.tsx
+@@ -11,6 +11,7 @@ import codexIcon from '../assets/icons/codex.svg';
+ import grokIcon from '../assets/icons/grok.svg';
+ import devinIcon from '../assets/icons/devin.svg';
+ import kimiIcon from '../assets/icons/kimi-light.svg';
++import pluginIcon from '../assets/icons/plugin.svg';
+ import { managementApi, readBoolean, responseList } from '../services/managementApi';
+ import { formatQuotaReset, useQuotaClock } from '../services/quotaTime';
+ import {
+@@ -42,9 +43,10 @@ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
+   xai: { label: 'xAI', icon: grokIcon },
+   devin: { label: 'Devin', icon: devinIcon },
+   antigravity: { label: 'Antigravity', icon: antigravityIcon },
++  plugin: { label: 'Plugins', icon: pluginIcon },
+ };
+ 
+-const providerOrder: QuotaProvider[] = ['claude', 'antigravity', 'codex', 'xai', 'kimi', 'devin'];
++const providerOrder: QuotaProvider[] = ['claude', 'antigravity', 'codex', 'xai', 'kimi', 'devin', 'plugin'];
+ const REFRESH_CONCURRENCY = 4;
+ 
+ export function QuotaPage() {
+diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
+index c9b1745..5cf7ba4 100644
+--- a/src/services/quotaService.ts
++++ b/src/services/quotaService.ts
+@@ -18,7 +18,14 @@ const quotaText = (
+ ) => translate(getCurrentLocale(), key, variables);
+ 
+ export type AuthFile = Record<string, unknown>;
+-export type QuotaProvider = 'claude' | 'codex' | 'kimi' | 'xai' | 'antigravity' | 'devin';
++export type QuotaProvider =
++  | 'claude'
++  | 'codex'
++  | 'kimi'
++  | 'xai'
++  | 'antigravity'
++  | 'devin'
++  | 'plugin';
+ export type QuotaStatus = 'idle' | 'loading' | 'success' | 'error';
+ export type QuotaRow = {
+   label: string;
+@@ -52,6 +59,8 @@ const endpointByProvider: Record<QuotaProvider, string> = {
+   kimi: 'https://api.kimi.com/coding/v1/usages',
+   xai: 'https://cli-chat-proxy.grok.com/v1/billing',
+   antigravity: 'https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
++  // Plugin providers are answered by the plugin management API; there is no upstream endpoint.
++  plugin: '',
+ };
+ 
+ const CLAUDE_PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile';
+@@ -88,10 +97,16 @@ const headersByProvider: Record<QuotaProvider, Record<string, string>> = {
+     'Content-Type': 'application/json',
+     'User-Agent': 'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)',
+   },
++  // The plugin API injects the credential server-side; the client only sends the auth index.
++  plugin: {},
+ };
+ 
++// cpa-multi-plugins providers that expose a quota summary through their plugin API.
++const PLUGIN_QUOTA_PROVIDERS = ['workbuddy', 'trae', 'qoder', 'zcode', 'mimo'];
++
+ export const providerForFile = (file: AuthFile): QuotaProvider | null => {
+   const value = readString(file, 'provider', 'type', 'account_type').toLowerCase().replace(/_/g, '-');
++  if (PLUGIN_QUOTA_PROVIDERS.includes(value)) return 'plugin';
+   if (value === 'x-ai' || value === 'grok') return 'xai';
+   if (value === 'cognition') return 'devin';
+   if (value === 'anthropic') return 'claude';
+@@ -836,6 +851,83 @@ const callCodexResetCredits = async (
+   return codexResetCreditDetailsFor(payload);
+ };
+ 
++const pluginNumber = (value: unknown): number | null =>
++  (typeof value === 'number' && Number.isFinite(value) ? value : null);
++
++// Plugin quota is resolved by the plugin's own management API. The bundled
++// cpa-multi-plugins providers share one payload shape: `summary` carries the
++// per-region and total pack numbers, `accounts[].checkin` the sign-in credits.
++async function loadPluginQuota(file: AuthFile): Promise<QuotaState> {
++  const pluginId = readString(file, 'provider', 'type', 'account_type').toLowerCase().replace(/_/g, '-');
++  if (!/^[a-z0-9-]+$/.test(pluginId)) throw new Error(quotaText('quota.service.error.unrecognized'));
++  const payload = await managementApi.post<Record<string, unknown>>(
++    `/v0/management/plugins/${pluginId}/refresh`,
++    undefined,
++    { timeoutMs: 30_000 },
++  );
++  if (!isRecord(payload)) throw new Error(quotaText('quota.service.error.noResponse'));
++  const summary = isRecord(payload.summary) ? payload.summary : {};
++  const totalSize = pluginNumber(summary.total_size) ?? 0;
++  const packCount = pluginNumber(summary.pack_count) ?? 0;
++  const rows: QuotaRow[] = [];
++  if (totalSize > 0) {
++    const totalRemain = pluginNumber(summary.total_remain) ?? 0;
++    rows.push({
++      label: quotaText('quota.plugin.packages'),
++      remainingPercent: Math.max(0, Math.min(100, (totalRemain / totalSize) * 100)),
++      detail: quotaText('quota.plugin.packagesDetail', {
++        remain: totalRemain, size: totalSize, count: packCount,
++      }),
++    });
++    // Only spell out the region split when more than one region holds quota.
++    const regions = Object.keys(summary)
++      .filter((key) => key.endsWith('_size') && key !== 'total_size')
++      .map((key) => {
++        const region = key.slice(0, -'_size'.length);
++        return {
++          region,
++          size: pluginNumber(summary[key]) ?? 0,
++          remain: pluginNumber(summary[`${region}_remain`]) ?? 0,
++        };
++      })
++      .filter((entry) => entry.size > 0);
++    if (regions.length > 1) {
++      regions.forEach((entry) => {
++        rows.push({
++          label: entry.region.toUpperCase(),
++          remainingPercent: Math.max(0, Math.min(100, (entry.remain / entry.size) * 100)),
++          detail: quotaText('quota.plugin.regionDetail', { remain: entry.remain, size: entry.size }),
++        });
++      });
++    }
++  }
++  const accounts = Array.isArray(payload.accounts) ? payload.accounts.filter(isRecord) : [];
++  const checkin = accounts
++    .map((account) => (isRecord(account.checkin) ? account.checkin : null))
++    .find((entry) => entry !== null);
++  if (checkin) {
++    const totalCredits = pluginNumber(checkin.total_credits) ?? 0;
++    if (totalCredits > 0) {
++      rows.push({
++        label: quotaText('quota.plugin.checkin'),
++        remainingPercent: null,
++        detail: quotaText('quota.plugin.checkinDetail', {
++          today: pluginNumber(checkin.today_credit) ?? 0,
++          total: totalCredits,
++          streak: pluginNumber(checkin.streak_days) ?? 0,
++        }),
++      });
++    }
++  }
++  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));
++  return {
++    status: 'success',
++    rows,
++    plan: packCount > 0 ? quotaText('quota.plugin.packCount', { count: packCount }) : undefined,
++    fetchedAt: Date.now(),
++  };
++}
++
+ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+   const provider = providerForFile(file);
+   if (!provider) {
+@@ -847,6 +939,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+   }
+   try {
+     if (booleanValue(file.disabled) === true) throw new Error(quotaText('quota.fileDisabled'));
++    if (provider === 'plugin') return await loadPluginQuota(file);
+     const codexMetadata = provider === 'codex' ? codexMetadataFor(file) : undefined;
+     const codexAccountId = codexMetadata?.accountId || '';
+     const responseClock: { serverTimeOffsetMs?: number } = {};
