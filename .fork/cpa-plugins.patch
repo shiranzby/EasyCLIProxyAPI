@@ -553,7 +553,7 @@ index bd73208..fb7b5bd 100644
  };
  
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
-index 4bbbdb6..6c7d3a8 100644
+index 4bbbdb6..a4cc287 100644
 --- a/src/services/quotaService.ts
 +++ b/src/services/quotaService.ts
 @@ -22,7 +22,14 @@ const quotaText = (
@@ -598,7 +598,7 @@ index 4bbbdb6..6c7d3a8 100644
    if (value === 'x-ai' || value === 'grok') return 'xai';
    if (value === 'cognition') return 'devin';
    if (value === 'anthropic') return 'claude';
-@@ -864,6 +879,115 @@ const callCodexResetCredits = async (
+@@ -864,6 +879,133 @@ const callCodexResetCredits = async (
    return codexResetCreditDetailsFor(payload);
  };
  
@@ -610,26 +610,44 @@ index 4bbbdb6..6c7d3a8 100644
 +  return /\(429\)|\b429\b|rate limit|rate limited|too many requests/i.test(message);
 +};
 +
-+// Refreshing every credential at once trips the plugin's request limiter, so
-+// pause for a second and ask again rather than surfacing the raw 429.
++// A plugin refresh already reports every account that plugin owns, so the
++// credentials page and the quota page asking at the same moment only need one
++// request between them. Sharing it is what keeps us under the limiter; the
++// retries below only cover the case where something else got there first.
++const pluginQuotaInFlight = new Map<string, Promise<Record<string, unknown>>>();
++
++const PLUGIN_QUOTA_RETRIES = 5;
++
 +async function refreshPluginQuota(pluginId: string): Promise<Record<string, unknown>> {
-+  let lastError: unknown;
-+  for (let attempt = 0; attempt < 5; attempt += 1) {
-+    try {
-+      return await managementApi.post<Record<string, unknown>>(
-+        `/v0/management/plugins/${pluginId}/refresh`,
-+        undefined,
-+        { timeoutMs: 30_000 },
-+      );
-+    } catch (error) {
-+      lastError = error;
-+      if (!isRateLimitedError(error)) throw error;
-+      await new Promise<void>((resolve) => {
-+        window.setTimeout(resolve, 1000);
-+      });
++  const shared = pluginQuotaInFlight.get(pluginId);
++  if (shared) return shared;
++  const pending = (async () => {
++    let lastError: unknown;
++    for (let attempt = 0; attempt <= PLUGIN_QUOTA_RETRIES; attempt += 1) {
++      try {
++        return await managementApi.post<Record<string, unknown>>(
++          `/v0/management/plugins/${pluginId}/refresh`,
++          undefined,
++          { timeoutMs: 30_000 },
++        );
++      } catch (error) {
++        lastError = error;
++        // Bail out on anything that is not the limiter, and stop once the
++        // retries are used up so the caller can report the failure.
++        if (!isRateLimitedError(error) || attempt === PLUGIN_QUOTA_RETRIES) break;
++        await new Promise<void>((resolve) => {
++          window.setTimeout(resolve, 1000 * (attempt + 1));
++        });
++      }
 +    }
++    throw lastError instanceof Error ? lastError : new Error(String(lastError ?? ''));
++  })();
++  pluginQuotaInFlight.set(pluginId, pending);
++  try {
++    return await pending;
++  } finally {
++    pluginQuotaInFlight.delete(pluginId);
 +  }
-+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? ''));
 +}
 +
 +// Plugin quota is resolved by the plugin's own management API. The bundled
@@ -714,7 +732,7 @@ index 4bbbdb6..6c7d3a8 100644
  async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    const provider = providerForFile(file);
    if (!provider) {
-@@ -875,6 +999,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+@@ -875,6 +1017,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    }
    try {
      if (booleanValue(file.disabled) === true) throw new Error(quotaText('quota.fileDisabled'));
