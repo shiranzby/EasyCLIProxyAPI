@@ -12,7 +12,7 @@ index c5a6f28..793d8f1 100644
          return Err("Untrusted application update release URL".to_string());
      }
 diff --git a/src-tauri/src/core_config/settings.rs b/src-tauri/src/core_config/settings.rs
-index 1644caf..e5987ba 100644
+index 1644caf..09d1080 100644
 --- a/src-tauri/src/core_config/settings.rs
 +++ b/src-tauri/src/core_config/settings.rs
 @@ -143,6 +143,47 @@ pub(crate) fn normalize_management_secret_key(secret_key: String) -> Result<Stri
@@ -49,7 +49,7 @@ index 1644caf..e5987ba 100644
 +                let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
 +                    continue;
 +                };
-+                if stem.is_empty() || ids.iter().any(|id| id == stem) {
++                if stem.is_empty() || ids.iter().any(|id| id.as_str() == stem) {
 +                    continue;
 +                }
 +                ids.push(stem.to_string());
@@ -71,7 +71,7 @@ index 1644caf..e5987ba 100644
 +            for plugin_id in installed_plugin_ids() {
 +                changed |= set_core_yaml_path_value(
 +                    document,
-+                    &["plugins", "configs", &plugin_id, "enabled"],
++                    &["plugins", "configs", plugin_id.as_str(), "enabled"],
 +                    serde_norway::Value::Bool(true),
 +                )?;
 +            }
