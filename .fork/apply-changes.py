@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 
@@ -60,10 +61,10 @@ replace('src-tauri/src/app_update.rs', [
 
 PLUGIN_ICON_IMPORTS = (
     "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
-    "import traeIcon from '../assets/icons/trae.svg';\n"
-    "import qoderIcon from '../assets/icons/qoder.svg';\n"
+    "import traeIcon from '../assets/icons/trae.png';\n"
+    "import qoderIcon from '../assets/icons/qoder.png';\n"
     "import zcodeIcon from '../assets/icons/zcode.png';\n"
-    "import mimoIcon from '../assets/icons/mimo.svg';"
+    "import mimoIcon from '../assets/icons/mimo.png';"
 )
 
 replace('src/pages/AuthFileManagementPage.tsx', [
@@ -449,6 +450,105 @@ replace('src/services/quotaService.ts', [
     ),
 ])
 
+# --- Rate-limited plugin quota: wait a second and ask again --------------------
+# Refreshing several credentials at once trips the plugin request limiter and the
+# core answers 429 "rate limit exceeded". Retry after a short pause instead of
+# showing that message to the user.
+
+replace('src/services/quotaService.ts', [
+    (
+        "const pluginNumber = (value: unknown): number | null =>\n"
+        "  (typeof value === 'number' && Number.isFinite(value) ? value : null);",
+        "const pluginNumber = (value: unknown): number | null =>\n"
+        "  (typeof value === 'number' && Number.isFinite(value) ? value : null);\n"
+        "\n"
+        "const isRateLimitedError = (error: unknown): boolean => {\n"
+        "  const message = error instanceof Error ? error.message : String(error ?? '');\n"
+        "  return /\\(429\\)|\\b429\\b|rate limit|rate limited|too many requests/i.test(message);\n"
+        "};\n"
+        "\n"
+        "// Refreshing every credential at once trips the plugin's request limiter, so\n"
+        "// pause for a second and ask again rather than surfacing the raw 429.\n"
+        "async function refreshPluginQuota(pluginId: string): Promise<Record<string, unknown>> {\n"
+        "  let lastError: unknown;\n"
+        "  for (let attempt = 0; attempt < 5; attempt += 1) {\n"
+        "    try {\n"
+        "      return await managementApi.post<Record<string, unknown>>(\n"
+        "        `/v0/management/plugins/${pluginId}/refresh`,\n"
+        "        undefined,\n"
+        "        { timeoutMs: 30_000 },\n"
+        "      );\n"
+        "    } catch (error) {\n"
+        "      lastError = error;\n"
+        "      if (!isRateLimitedError(error)) throw error;\n"
+        "      await new Promise<void>((resolve) => {\n"
+        "        window.setTimeout(resolve, 1000);\n"
+        "      });\n"
+        "    }\n"
+        "  }\n"
+        "  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? ''));\n"
+        "}",
+    ),
+    (
+        "  const payload = await managementApi.post<Record<string, unknown>>(\n"
+        "    `/v0/management/plugins/${pluginId}/refresh`,\n"
+        "    undefined,\n"
+        "    { timeoutMs: 30_000 },\n"
+        "  );\n"
+        "  if (!isRecord(payload)) throw new Error(quotaText('quota.service.error.noResponse'));\n",
+        "  let payload: Record<string, unknown> | null = null;\n"
+        "  try {\n"
+        "    payload = await refreshPluginQuota(pluginId);\n"
+        "  } catch (error) {\n"
+        "    if (isRateLimitedError(error)) throw new Error(quotaText('quota.plugin.rateLimited'));\n"
+        "    throw error;\n"
+        "  }\n"
+        "  if (!isRecord(payload)) throw new Error(quotaText('quota.service.error.noResponse'));\n",
+    ),
+])
+
+# --- Plugin OAuth cards: use the plugin's own logo ------------------------------
+# Upstream renders a generic puzzle glyph for every plugin card. Prefer the local
+# brand icon, then the plugin's `logo` metadata, and only fall back to the puzzle.
+
+replace('src/pages/PluginOAuthProviders.tsx', [
+    (
+        "import { LogIn, Puzzle, RefreshCw } from 'lucide-react';",
+        "import { LogIn, Puzzle, RefreshCw } from 'lucide-react';\n"
+        "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
+        "import traeIcon from '../assets/icons/trae.png';\n"
+        "import qoderIcon from '../assets/icons/qoder.png';\n"
+        "import zcodeIcon from '../assets/icons/zcode.png';\n"
+        "import mimoIcon from '../assets/icons/mimo.png';",
+    ),
+    (
+        "export function PluginOAuthProviders(",
+        "const PLUGIN_ICON_BY_PROVIDER: Record<string, string> = {\n"
+        "  workbuddy: workbuddyIcon,\n"
+        "  trae: traeIcon,\n"
+        "  qoder: qoderIcon,\n"
+        "  zcode: zcodeIcon,\n"
+        "  mimo: mimoIcon,\n"
+        "};\n"
+        "\n"
+        "const pluginLogo = (plugin: PluginListEntry): string => {\n"
+        "  const provider = plugin.oauthProvider ?? '';\n"
+        "  const local = PLUGIN_ICON_BY_PROVIDER[provider] ?? '';\n"
+        "  if (local) return local;\n"
+        "  const remote = typeof plugin.logo === 'string' ? plugin.logo.trim() : '';\n"
+        "  return remote;\n"
+        "};\n"
+        "\n"
+        "export function PluginOAuthProviders(",
+    ),
+    (
+        "          <Puzzle className=\"provider-logo\" size={40} aria-hidden=\"true\" />",
+        "          {pluginLogo(plugin)\n"
+        "            ? <img className=\"provider-logo\" src={pluginLogo(plugin)} alt=\"\" width={40} height={40} />\n"
+        "            : <Puzzle className=\"provider-logo\" size={40} aria-hidden=\"true\" />}",
+    ),
+])
+
 # --- Credential import: accept third-party exports, and export a credential ----
 
 replace('src/services/managementApi.ts', [
@@ -726,15 +826,142 @@ for path, lines in AUTH_FILE_MESSAGES.items():
 
 SVG_TITLE = '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>%s</title>%s</svg>\n'
 
-ICONS = {
-    'trae.svg': ('Trae', '<path d="M7 6h10v2.2H7V6zm3.9 0h2.2v12h-2.2V6z"/>'),
-    'qoder.svg': ('Qoder', '<path d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 3.4a5.6 5.6 0 110 11.2 5.6 5.6 0 010-11.2zM15.2 15.2l4.3 4.3-1.9 1.9-4.3-4.3 1.9-1.9z"/>'),
-    'mimo.svg': ('MiMo', '<path d="M12 3a9 9 0 100 18 9 9 0 000-18zm0 3.2a5.8 5.8 0 110 11.6 5.8 5.8 0 010-11.6z" /><path d="M12 9.6a2.4 2.4 0 100 4.8 2.4 2.4 0 000-4.8z"/>'),
-    'plugin.svg': ('Plugins', '<path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/>'),
+# Per-provider icons for the credential list and the plugin OAuth cards.
+# The PNGs are the real brand logos (64px) taken from each plugin's `logo`
+# metadata, embedded here so regenerating the patch stays offline.
+PLUGIN_LOGOS = {
+    'trae.png': (
+        'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABVUlEQVR42mPk4ub9zzCEARPDEAejHhj1wKgHRj0w'
+        '6oFRD4x6YCABCyEF/GEGA+rAj6suUOYByX7/Qe2B0Tww6gFaZ2J08GXnTYaX9Tto4hixBg8GXg912nrg78cfDL8f'
+        'f6CJB/59+jGaByg3kI+DKmoGxAOssgIMirvSGUSK7fE6Xm5NPNXqFxZqOl5udTwDq6wAg0iRAwMDAwPDm96DWB3P'
+        'oS3BwKEtwcDAwMDwvHDjwMcAsuNhQKTIASUmkB2P3EyhNCZom4mRRpwYoXhQZuLfjz8wPApdiFK8vuk9wPCmD5GE'
+        '/n76wfAoZCHDz6svUNo5gyIJoXsC3fHYPEENx1M1E8M8cd9tJt4KCeaJv2RUWnTJA8TUptRy/GhNPCRaozekGzG6'
+        'mBpP60djYNQDI7ZH9vvxB4aPqy4OGg8wjs6RjXpg1AOjHhj1wKgHRj0w6oER7AEAEeV5RSJorpwAAAAASUVORK5C'
+        'YII='
+    ),
+    'qoder.png': (
+        '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'
+    ),
+    'mimo.png': (
+        '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'
+    ),
 }
 
-for name, (title, body) in ICONS.items():
-    full = os.path.join(ROOT, 'src', 'assets', 'icons', name)
-    with open(full, 'w', encoding='utf-8', newline='') as handle:
-        handle.write(SVG_TITLE % (title, body))
+for name, chunks in PLUGIN_LOGOS.items():
+    target_path = os.path.join(ROOT, 'src', 'assets', 'icons', name)
+    logo_bytes = base64.b64decode(''.join(chunks))
+    with open(target_path, 'wb') as handle:
+        handle.write(logo_bytes)
     print('wrote', name)
+
+PLUGIN_GROUP_ICON = '<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Plugins</title><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>\n'
+with open(os.path.join(ROOT, 'src', 'assets', 'icons', 'plugin.svg'), 'w', encoding='utf-8', newline='') as handle:
+    handle.write(PLUGIN_GROUP_ICON)
+print('wrote plugin.svg')
