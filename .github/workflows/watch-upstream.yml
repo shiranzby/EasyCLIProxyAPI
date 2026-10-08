@@ -104,7 +104,27 @@ jobs:
 
       - name: Apply CPA plugin patch
         shell: bash
-        run: git -C app apply --whitespace=nowarn --binary "$GITHUB_WORKSPACE/fork/.fork/cpa-plugins.patch"
+        run: git -C app apply --whitespace=nowarn "$GITHUB_WORKSPACE/fork/.fork/cpa-plugins.patch"
+
+      # The bundled plugin icons live outside upstream, so fetch them from each
+      # plugin's logo metadata here (a binary diff in the patch is not portable
+      # across the git builds used by the runners).
+      - name: Fetch bundled plugin icons
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          target="src/assets/icons"
+          mkdir -p "$target"
+          fetch_icon() {
+            local name="$1" url="$2"
+            curl -fsSL --retry 3 --retry-delay 2 --max-time 60 "$url" -o "$target/$name.png"
+            test -s "$target/$name.png" || { echo "empty icon: $name"; exit 1; }
+            echo "fetched $name.png ($(wc -c < "$target/$name.png") bytes)"
+          }
+          fetch_icon trae "https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae_website_prod_cn/favicon.png"
+          fetch_icon qoder "https://raw.githubusercontent.com/DGZSbot/ai-icon/refs/heads/main/QoderWork.png"
+          fetch_icon mimo "https://avatars.githubusercontent.com/u/208276378?s=60&v=4"
 
       - name: Resolve package stem
         id: package
