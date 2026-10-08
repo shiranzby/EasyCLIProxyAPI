@@ -627,28 +627,8 @@ replace('src/pages/PluginOAuthProviders.tsx', [
     (
         "          <Puzzle className=\"provider-logo\" size={40} aria-hidden=\"true\" />",
         "          {pluginLogo(plugin)\n"
-        "            ? <img className=\"provider-logo provider-logo-image\" src={pluginLogo(plugin)} alt=\"\" />\n"
+        "            ? <img className=\"provider-logo\" src={pluginLogo(plugin)} alt=\"\" />\n"
         "            : <Puzzle className=\"provider-logo\" size={40} aria-hidden=\"true\" />}",
-    ),
-])
-
-# The shared .provider-logo rule keeps artwork letterboxed (object-fit: contain),
-# which leaves a visible gap around square brand badges. Fill the slot instead.
-
-replace('src/styles.css', [
-    (
-        '.oauth-card-body {',
-        '/* Brand marks are square badges and should fill the slot. The shared\n'
-        '   .provider-logo rule letterboxes them with object-fit: contain, which leaves\n'
-        '   a visible gap around the artwork on the plugin OAuth cards. */\n'
-        '.provider-logo-image {\n'
-        '  width: 38px;\n'
-        '  height: 38px;\n'
-        '  object-fit: cover;\n'
-        '  border-radius: 8px;\n'
-        '}\n'
-        '\n'
-        '.oauth-card-body {',
     ),
 ])
 

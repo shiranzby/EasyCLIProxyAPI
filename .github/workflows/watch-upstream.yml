@@ -126,6 +126,21 @@ jobs:
           fetch_icon qoder "https://raw.githubusercontent.com/DGZSbot/ai-icon/refs/heads/main/QoderWork.png"
           fetch_icon mimo "https://avatars.githubusercontent.com/u/208276378?s=60&v=4"
 
+      # Two of the bundled plugin icons carry a transparent margin inside the file
+      # (workbuddy.png and zcode.png are only 83% content). The OAuth cards render
+      # icons with object-fit: contain, so that inset shows as a gap around the
+      # artwork and no CSS can recover it - the pixels have to go. Only the plugin
+      # icons are named here on purpose: trimming the rest of the upstream icon set
+      # would visibly resize unrelated provider marks.
+      - name: Trim transparent margins from plugin icons
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check pillow
+          python "$GITHUB_WORKSPACE/fork/.fork/trim-icons.py" src/assets/icons \
+            workbuddy trae qoder zcode mimo
+
       - name: Resolve package stem
         id: package
         shell: bash
