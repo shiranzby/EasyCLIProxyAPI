@@ -113,53 +113,6 @@ index ca06244..af3d140 100644
      Ok(format!("{origin}/v8/management/{path}"))
  }
  
-diff --git a/src/assets/icons/mimo.png b/src/assets/icons/mimo.png
-new file mode 100644
-index 0000000000000000000000000000000000000000..bfcf4a6dd9e018fa6c84f4966387222f8543aa13
-GIT binary patch
-literal 1970
-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
-
-literal 0
-HcmV?d00001
-
 diff --git a/src/assets/icons/plugin.svg b/src/assets/icons/plugin.svg
 new file mode 100644
 index 0000000..8f1402f
@@ -167,135 +120,8 @@ index 0000000..8f1402f
 +++ b/src/assets/icons/plugin.svg
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Plugins</title><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
-diff --git a/src/assets/icons/qoder.png b/src/assets/icons/qoder.png
-new file mode 100644
-index 0000000000000000000000000000000000000000..b5a5b7a03468f011e367552b76a7081e061a1e74
-GIT binary patch
-literal 5196
-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
-GLSTa1{spoC
-
-literal 0
-HcmV?d00001
-
-diff --git a/src/assets/icons/trae.png b/src/assets/icons/trae.png
-new file mode 100644
-index 0000000000000000000000000000000000000000..3bbae5c722eb6096a099a1f3940920000cac9476
-GIT binary patch
-literal 398
-zcmeAS@N?(olHy`uVBq!ia0vp^1|ZDA1|-9oezr3(Fot@%IEGZ*N`CU_+28X9EsVm4
-z1=ttMNqjx9g5Ay5;8kNFe@|6{0wcE~>z_n6=2r*$SL+2lV?0^+-|=nZMH_=xj8W-H
-zB_C3s`?gL0YMt>&Vj~+rTO5Dst*Qs_kIVDym#<&Y$^NhQm*FgS4f6^8&01M(N0`@a
-zV&duAeM!=#>+MIYxIAB*tFOexvVg2o8|Kw(7@9pMGK0Y3+4q_wWX~_uJ$L|wf#AcQ
-zg2xArGi-XC=&<AjqpI2j+5S5|3r*BAW_M0>n<KHXA|UP2{eF7`8?M-npgsFu+8+3@
-zjDKRwzq(%sKWL;V9zMTXKj4;Svl8dRYNop%Z`e5U9uGDZK5SEXKUeJ@7w5Ci{V5?)
-zB`2AWTv>Ld=ud{PjY`yF^Ci-TyJkrFzjjYfxWcTw&HdZ&kL+#0VBnMDH|RSzv9}5+
-fj2vQuZx|T_pH{jmWvrV63}*&US3j3^P6<r_O2Mc6
-
-literal 0
-HcmV?d00001
-
 diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
-index 4482133..5549ee8 100644
+index 4482133..df84365 100644
 --- a/src/i18n/ja.ts
 +++ b/src/i18n/ja.ts
 @@ -1919,4 +1919,16 @@ export const jaOverrides = {
@@ -307,16 +133,16 @@ index 4482133..5549ee8 100644
 +  'authFiles.exportFailed': 'エクスポートに失敗: {error}',
 +  'quota.plugin.pool': '全アカウント合計',
 +  'quota.plugin.poolDetail': '{count} アカウント · 残り {remain} / {size}',
-+  'quota.plugin.rateLimited': '照会が頻繁すぎます。少し待ってから再試行してください',
 +  'quota.plugin.packages': 'パッケージ枠',
 +  'quota.plugin.packagesDetail': '残り {remain} / {size} · {count} パッケージ',
 +  'quota.plugin.regionDetail': '残り {remain} / {size}',
 +  'quota.plugin.packCount': '{count} パッケージ',
 +  'quota.plugin.checkin': 'チェックイン積分',
 +  'quota.plugin.checkinDetail': '本日 +{today} · 累計 {total} · {streak} 日連続',
++  'quota.plugin.rateLimited': '照会が頻繁すぎます。少し待ってから再試行してください',
  } satisfies Record<MessageKey, string>;
 diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
-index ca1d0b2..c57345c 100644
+index ca1d0b2..cfb5e44 100644
 --- a/src/i18n/locales/en.ts
 +++ b/src/i18n/locales/en.ts
 @@ -1919,4 +1919,16 @@ export const en: Record<MessageKey, string> = {
@@ -328,13 +154,13 @@ index ca1d0b2..c57345c 100644
 +  'authFiles.exportFailed': 'Export failed: {error}',
 +  'quota.plugin.pool': 'All accounts',
 +  'quota.plugin.poolDetail': '{count} accounts · {remain} of {size} left',
-+  'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',
 +  'quota.plugin.packages': 'Package quota',
 +  'quota.plugin.packagesDetail': '{remain} of {size} left · {count} packages',
 +  'quota.plugin.regionDetail': '{remain} of {size} left',
 +  'quota.plugin.packCount': '{count} packages',
 +  'quota.plugin.checkin': 'Check-in credits',
 +  'quota.plugin.checkinDetail': '+{today} today · {total} total · {streak} day streak',
++  'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',
  };
 diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
 index c8307ef..f1f124f 100644
