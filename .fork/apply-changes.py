@@ -271,6 +271,7 @@ QUOTA_MESSAGES = {
         ("'quota.plugin.packCount': '{count} 个套餐包',"),
         ("'quota.plugin.checkin': '签到积分',"),
         ("'quota.plugin.checkinDetail': '今日 +{today} · 累计 {total} · 连续 {streak} 天',"),
+        ("'quota.plugin.rateLimited': '查询过于频繁，请稍后再试',"),
     ],
     'src/i18n/locales/en.ts': [
         ("'quota.plugin.packages': 'Package quota',"),
@@ -279,6 +280,7 @@ QUOTA_MESSAGES = {
         ("'quota.plugin.packCount': '{count} packages',"),
         ("'quota.plugin.checkin': 'Check-in credits',"),
         ("'quota.plugin.checkinDetail': '+{today} today · {total} total · {streak} day streak',"),
+        ("'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',"),
     ],
     'src/i18n/ja.ts': [
         ("'quota.plugin.packages': 'パッケージ枠',"),
@@ -287,6 +289,7 @@ QUOTA_MESSAGES = {
         ("'quota.plugin.packCount': '{count} パッケージ',"),
         ("'quota.plugin.checkin': 'チェックイン積分',"),
         ("'quota.plugin.checkinDetail': '本日 +{today} · 累計 {total} · {streak} 日連続',"),
+        ("'quota.plugin.rateLimited': '照会が頻繁すぎます。少し待ってから再試行してください',"),
     ],
 }
 
