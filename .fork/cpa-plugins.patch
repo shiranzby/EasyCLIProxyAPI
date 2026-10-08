@@ -11,6 +11,74 @@ index c5a6f28..793d8f1 100644
      {
          return Err("Untrusted application update release URL".to_string());
      }
+diff --git a/src-tauri/src/core_config/settings.rs b/src-tauri/src/core_config/settings.rs
+index 1644caf..e5987ba 100644
+--- a/src-tauri/src/core_config/settings.rs
++++ b/src-tauri/src/core_config/settings.rs
+@@ -143,6 +143,47 @@ pub(crate) fn normalize_management_secret_key(secret_key: String) -> Result<Stri
+     Ok(secret_key)
+ }
+ 
++/// Collect the plugin ids present in the kernel plugin directory. The file
++/// stem is the id the core reports, so no id list is hardcoded here.
++fn installed_plugin_ids() -> Vec<String> {
++    let Ok(plugin_dir) = core_install_dir().map(|dir| dir.join("plugins")) else {
++        return Vec::new();
++    };
++    let Ok(platform_dir) = std::fs::read_dir(plugin_dir) else {
++        return Vec::new();
++    };
++    let mut ids: Vec<String> = Vec::new();
++    for os_entry in platform_dir.flatten() {
++        let Ok(arch_dir) = std::fs::read_dir(os_entry.path()) else {
++            continue;
++        };
++        for arch_entry in arch_dir.flatten() {
++            let arch_path = arch_entry.path();
++            if !arch_path.is_dir() {
++                continue;
++            }
++            let Ok(files) = std::fs::read_dir(arch_path) else {
++                continue;
++            };
++            for file in files.flatten() {
++                let path = file.path();
++                if path.extension().and_then(|ext| ext.to_str()) != Some("dll") {
++                    continue;
++                }
++                let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
++                    continue;
++                };
++                if stem.is_empty() || ids.iter().any(|id| id == stem) {
++                    continue;
++                }
++                ids.push(stem.to_string());
++            }
++        }
++    }
++    ids.sort();
++    ids
++}
++
+ pub(crate) fn is_example_core_api_key(api_key: &str) -> bool {
+     let value = api_key.trim();
+     value == "your-api-key" || value.starts_with("your-api-key-")
+@@ -652,6 +693,15 @@ pub(crate) fn apply_gui_managed_settings(
+             "enabled",
+             serde_norway::Value::Bool(config.plugins_enabled),
+         )?;
++        if config.plugins_enabled {
++            for plugin_id in installed_plugin_ids() {
++                changed |= set_core_yaml_path_value(
++                    document,
++                    &["plugins", "configs", &plugin_id, "enabled"],
++                    serde_norway::Value::Bool(true),
++                )?;
++            }
++        }
+         changed |= set_core_yaml_nested_value(
+             document,
+             "routing",
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
 index 2546a9e..fbc2e81 100644
 --- a/src-tauri/src/main.rs
