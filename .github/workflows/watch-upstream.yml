@@ -175,6 +175,28 @@ jobs:
           echo "Injected $count plugin libraries"
           ls -l "$target"
 
+      # Core 8.0.13+ only loads a plugin when `plugins.configs.<id>.enabled` is set:
+      # dropping the DLLs in place is no longer enough (they appear as
+      # configured=false and are never registered). Ship a minimal kernel config with
+      # those entries so the bundled providers work on first launch.
+      - name: Seed kernel config with bundled plugin entries
+        if: matrix.os == 'windows' && matrix.arch == 'amd64'
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          cfg="release/${{ steps.package.outputs.stem }}/cpa-core/config.yaml"
+          {
+            printf 'plugins:\n'
+            printf '  enabled: true\n'
+            printf '  dir: "plugins"\n'
+            printf '  configs:\n'
+            for id in workbuddy trae qoder zcode mimo; do
+              printf '    %s:\n      enabled: true\n' "$id"
+            done
+          } > "$cfg"
+          cat "$cfg"
+
       - name: Archive release
         shell: pwsh
         working-directory: app

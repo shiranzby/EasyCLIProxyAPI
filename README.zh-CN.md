@@ -37,7 +37,10 @@
 > ② 本构建已把 `plugins.enabled` 默认改为 `true`，首次启动即可看到 WorkBuddy / Trae / Qoder / ZCode / MiMo；
 > 若仍看不到，检查 `cpa-core/config.yaml` 的 `plugins.enabled` 并重启内核（界面上没有这个开关）；
 > ③ 安装包未做代码签名，Windows SmartScreen 可能拦截，需选择「仍要运行」；
-> ④ `portable-update-windows.json` 是应用内「检查更新」用的清单，程序会自动拉取，**不需要手动下载或导入**。
+> ④ `portable-update-windows.json` 是应用内「检查更新」用的清单，程序会自动拉取，**不需要手动下载或导入**；
+> ⑤ 包里的 `cpa-core/config.yaml` 只为**全新安装**预置 5 个插件的启用开关（内核 8.0.13+ 只加载
+> `plugins.configs.<id>.enabled: true` 的插件，光有 DLL 不会被加载）。**升级覆盖安装时请不要覆盖**这个文件，
+> 否则会丢掉你自己的内核级设置。
 
 <p align="center">
   <img src="src/assets/logo.jpg" width="112" alt="EasyCLIProxyAPI Logo">
