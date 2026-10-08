@@ -418,7 +418,7 @@ index e4c00d5..2c6c9ca 100644
                      </div>
                      <div className="auth-list-main-actions">
 diff --git a/src/pages/PluginOAuthProviders.tsx b/src/pages/PluginOAuthProviders.tsx
-index ebe909a..aeb32ec 100644
+index ebe909a..c9b4af2 100644
 --- a/src/pages/PluginOAuthProviders.tsx
 +++ b/src/pages/PluginOAuthProviders.tsx
 @@ -1,6 +1,11 @@
@@ -462,7 +462,7 @@ index ebe909a..aeb32ec 100644
          <div className="provider-title-row">
 -          <Puzzle className="provider-logo" size={40} aria-hidden="true" />
 +          {pluginLogo(plugin)
-+            ? <img className="provider-logo" src={pluginLogo(plugin)} alt="" width={40} height={40} />
++            ? <img className="provider-logo" src={pluginLogo(plugin)} alt="" />
 +            : <Puzzle className="provider-logo" size={40} aria-hidden="true" />}
            <div>
              <h2>{pluginOAuthText('providerTitle', locale).replace('{name}', getPluginTitle(plugin))}</h2>
