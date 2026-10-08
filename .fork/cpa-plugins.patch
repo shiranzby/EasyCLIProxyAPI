@@ -468,18 +468,53 @@ index ebe909a..c9b4af2 100644
              <h2>{pluginOAuthText('providerTitle', locale).replace('{name}', getPluginTitle(plugin))}</h2>
              {authorized && <span className="state-pill success">{t('oauth.status.completed')}</span>}
 diff --git a/src/pages/QuotaPage.tsx b/src/pages/QuotaPage.tsx
-index bd0b269..9b18793 100644
+index bd0b269..a5042bd 100644
 --- a/src/pages/QuotaPage.tsx
 +++ b/src/pages/QuotaPage.tsx
-@@ -13,6 +13,7 @@ import codexIcon from '../assets/icons/codex.svg';
+@@ -13,7 +13,13 @@ import codexIcon from '../assets/icons/codex.svg';
  import grokIcon from '../assets/icons/grok.svg';
  import devinIcon from '../assets/icons/devin.svg';
  import kimiIcon from '../assets/icons/kimi-light.svg';
+-import { managementApi, readBoolean, responseList } from '../services/managementApi';
 +import pluginIcon from '../assets/icons/plugin.svg';
- import { managementApi, readBoolean, responseList } from '../services/managementApi';
++import workbuddyIcon from '../assets/icons/workbuddy.png';
++import traeIcon from '../assets/icons/trae.png';
++import qoderIcon from '../assets/icons/qoder.png';
++import zcodeIcon from '../assets/icons/zcode.png';
++import mimoIcon from '../assets/icons/mimo.png';
++import { managementApi, readBoolean, readString, responseList } from '../services/managementApi';
  import { formatQuotaReset, useQuotaClock } from '../services/quotaTime';
  import {
-@@ -45,9 +46,10 @@ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
+   fileName,
+@@ -38,6 +44,27 @@ import { dedupeAuthFiles, parseAuthFilePriority, sortAuthFilesByPriority } from
+ import { useI18n } from '../i18n';
+ import './QuotaPage.css';
+ 
++// Every bundled plugin shares the single `plugin` quota provider, so the group icon
++// (a generic puzzle) says nothing about which provider a credential belongs to. Show
++// the credential's own plugin logo, and keep the group icon only as a fallback for
++// plugins that ship no bundled logo.
++const PLUGIN_CARD_ICONS: Record<string, string> = {
++  workbuddy: workbuddyIcon,
++  trae: traeIcon,
++  qoder: qoderIcon,
++  zcode: zcodeIcon,
++  mimo: mimoIcon,
++};
++
++const cardIcon = (provider: QuotaProvider | null, file: AuthFile): string => {
++  if (provider === 'plugin') {
++    const pluginId = readString(file, 'provider', 'type', 'account_type').toLowerCase().replace(/_/g, '-');
++    const own = PLUGIN_CARD_ICONS[pluginId];
++    if (own) return own;
++  }
++  return provider ? providerMeta[provider].icon : '';
++};
++
+ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
+   claude: { label: 'Claude', icon: claudeIcon },
+   codex: { label: 'Codex', icon: codexIcon },
+@@ -45,9 +72,10 @@ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
    xai: { label: 'xAI', icon: grokIcon },
    devin: { label: 'Devin', icon: devinIcon },
    antigravity: { label: 'Antigravity', icon: antigravityIcon },
@@ -491,6 +526,15 @@ index bd0b269..9b18793 100644
  const REFRESH_CONCURRENCY = 4;
  
  export function QuotaPage() {
+@@ -215,7 +243,7 @@ export function QuotaCard({ file, quota, onRefresh, onReset }: { file: AuthFile;
+     <article className="panel real-quota-card">
+       <div className="real-quota-card-header">
+         <div className="quota-identity">
+-          <img src={provider ? providerMeta[provider].icon : ''} alt="" className="quota-account-icon" />
++          <img src={cardIcon(provider, file)} alt="" className="quota-account-icon" />
+           <div><strong title={name}>{name}</strong><span>{provider ? providerMeta[provider].label : t('quota.unknownProvider')}</span></div>
+         </div>
+         <div className="quota-plan"><strong>{quota.plan || '—'}</strong><span>{quota.subscriptionActiveUntil ? t('quota.expiresAt', { time: formatQuotaTimestamp(quota.subscriptionActiveUntil, locale) }) : ''}</span></div>
 diff --git a/src/services/managementApi.ts b/src/services/managementApi.ts
 index bd73208..fb7b5bd 100644
 --- a/src/services/managementApi.ts
