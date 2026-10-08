@@ -40,6 +40,86 @@ replace('src-tauri/src/main.rs', [
     ),
 ])
 
+# --- Enable every plugin that is actually on disk ----------------------------
+# Core 8.0.13+ ignores a plugin DLL unless `plugins.configs.<id>.enabled` is true:
+# the file alone leaves it configured=false and never registered, so a fresh
+# install shows no providers. The GUI has no toggle for that field either, and
+# shipping a config file for it is not an option - the app rewrites config.yaml on
+# first launch and would clobber the user's own settings. So fill the flag in at
+# the point where the GUI writes the managed kernel settings, only for plugins
+# that are really installed, and never touch an entry the user already set.
+
+replace('src-tauri/src/core_config/settings.rs', [
+    (
+        '        changed |= set_core_yaml_nested_value(\n'
+        '            document,\n'
+        '            "plugins",\n'
+        '            "enabled",\n'
+        '            serde_norway::Value::Bool(config.plugins_enabled),\n'
+        '        )?;\n',
+        '        changed |= set_core_yaml_nested_value(\n'
+        '            document,\n'
+        '            "plugins",\n'
+        '            "enabled",\n'
+        '            serde_norway::Value::Bool(config.plugins_enabled),\n'
+        '        )?;\n'
+        '        if config.plugins_enabled {\n'
+        '            for plugin_id in installed_plugin_ids() {\n'
+        '                changed |= set_core_yaml_path_value(\n'
+        '                    document,\n'
+        '                    &["plugins", "configs", &plugin_id, "enabled"],\n'
+        '                    serde_norway::Value::Bool(true),\n'
+        '                )?;\n'
+        '            }\n'
+        '        }\n',
+    ),
+    (
+        'pub(crate) fn core_config_uses_v8(document: &serde_norway::Value) -> bool {',
+        '/// Collect the plugin ids present in the kernel plugin directory. The file\n'
+        '/// stem is the id the core reports, so no id list is hardcoded here.\n'
+        'fn installed_plugin_ids() -> Vec<String> {\n'
+        '    let Ok(plugin_dir) = core_install_dir().map(|dir| dir.join("plugins")) else {\n'
+        '        return Vec::new();\n'
+        '    };\n'
+        '    let Ok(platform_dir) = std::fs::read_dir(plugin_dir) else {\n'
+        '        return Vec::new();\n'
+        '    };\n'
+        '    let mut ids: Vec<String> = Vec::new();\n'
+        '    for os_entry in platform_dir.flatten() {\n'
+        '        let Ok(arch_dir) = std::fs::read_dir(os_entry.path()) else {\n'
+        '            continue;\n'
+        '        };\n'
+        '        for arch_entry in arch_dir.flatten() {\n'
+        '            let arch_path = arch_entry.path();\n'
+        '            if !arch_path.is_dir() {\n'
+        '                continue;\n'
+        '            }\n'
+        '            let Ok(files) = std::fs::read_dir(arch_path) else {\n'
+        '                continue;\n'
+        '            };\n'
+        '            for file in files.flatten() {\n'
+        '                let path = file.path();\n'
+        '                if path.extension().and_then(|ext| ext.to_str()) != Some("dll") {\n'
+        '                    continue;\n'
+        '                }\n'
+        '                let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {\n'
+        '                    continue;\n'
+        '                };\n'
+        '                if stem.is_empty() || ids.iter().any(|id| id == stem) {\n'
+        '                    continue;\n'
+        '                }\n'
+        '                ids.push(stem.to_string());\n'
+        '            }\n'
+        '        }\n'
+        '    }\n'
+        '    ids.sort();\n'
+        '    ids\n'
+        '}\n'
+        '\n'
+        'pub(crate) fn core_config_uses_v8(document: &serde_norway::Value) -> bool {',
+    ),
+])
+
 OLD_REPO = 'router-for-me/EasyCLIProxyAPI'
 NEW_REPO = 'shiranzby/EasyCLIProxyAPI'
 
