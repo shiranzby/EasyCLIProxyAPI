@@ -74,7 +74,7 @@ replace('src-tauri/src/core_config/settings.rs', [
         '        }\n',
     ),
     (
-        'pub(crate) fn core_config_uses_v8(document: &serde_norway::Value) -> bool {',
+        'pub(crate) fn is_example_core_api_key(api_key: &str) -> bool {',
         '/// Collect the plugin ids present in the kernel plugin directory. The file\n'
         '/// stem is the id the core reports, so no id list is hardcoded here.\n'
         'fn installed_plugin_ids() -> Vec<String> {\n'
@@ -116,7 +116,7 @@ replace('src-tauri/src/core_config/settings.rs', [
         '    ids\n'
         '}\n'
         '\n'
-        'pub(crate) fn core_config_uses_v8(document: &serde_norway::Value) -> bool {',
+        'pub(crate) fn is_example_core_api_key(api_key: &str) -> bool {',
     ),
 ])
 
