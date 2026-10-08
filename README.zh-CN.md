@@ -32,6 +32,12 @@
 >
 > 下载：见右侧 **Releases**，选择与上游同名 tag 的 `Windows-amd64.zip`。
 > 覆盖安装时请保留 `config.toml`、`oauth/` 与 `cpa-core/config.yaml`。
+>
+> **安装注意**：① 插件 DLL 只打进 **Windows amd64** 包（aarch64 包与上游一致、不含插件）；
+> ② 本构建已把 `plugins.enabled` 默认改为 `true`，首次启动即可看到 WorkBuddy / Trae / Qoder / ZCode / MiMo；
+> 若仍看不到，检查 `cpa-core/config.yaml` 的 `plugins.enabled` 并重启内核（界面上没有这个开关）；
+> ③ 安装包未做代码签名，Windows SmartScreen 可能拦截，需选择「仍要运行」；
+> ④ `portable-update-windows.json` 是应用内「检查更新」用的清单，程序会自动拉取，**不需要手动下载或导入**。
 
 <p align="center">
   <img src="src/assets/logo.jpg" width="112" alt="EasyCLIProxyAPI Logo">

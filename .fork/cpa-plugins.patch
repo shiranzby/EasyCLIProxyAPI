@@ -25,7 +25,7 @@ index c5a6f28..793d8f1 100644
          return Err("Untrusted application update release URL".to_string());
      }
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
-index dca3d5a..00ba39e 100644
+index dca3d5a..7bdaa99 100644
 --- a/src-tauri/src/main.rs
 +++ b/src-tauri/src/main.rs
 @@ -103,13 +103,13 @@ const RELEASE_ATOM_URL: &str = "https://github.com/router-for-me/CLIProxyAPI/rel
@@ -46,7 +46,18 @@ index dca3d5a..00ba39e 100644
  #[cfg(windows)]
  const APP_UPDATE_MANIFEST_NAME: &str = "portable-update-windows.json";
  #[cfg(target_os = "linux")]
-@@ -2685,6 +2685,7 @@ fn main() {
+@@ -920,7 +920,9 @@ impl Default for GuiConfigFile {
+             usage_statistics_enabled: true,
+             redis_usage_queue_retention_seconds: DEFAULT_REDIS_USAGE_QUEUE_RETENTION_SECONDS,
+             request_log: false,
+-            plugins_enabled: false,
++            // This build ships cpa-multi-plugins and the GUI has no toggle for
++            // plugins.enabled, so load them by default.
++            plugins_enabled: true,
+             routing_strategy: "round-robin".to_string(),
+             proxy_url: String::new(),
+             proxy_override: false,
+@@ -2685,6 +2687,7 @@ fn main() {
              management_api::management_request,
              provider_health::provider_health_probe,
              management_api::upload_auth_file,

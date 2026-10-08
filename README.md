@@ -36,6 +36,14 @@
 >
 > Download: see **Releases** on the right — pick the `Windows-amd64.zip` whose tag matches upstream.
 > Keep `config.toml`, `oauth/` and `cpa-core/config.yaml` when overwriting an install.
+>
+> **Install notes**: ① plugin DLLs are only injected into the **Windows amd64** archive (the
+> aarch64 archive is identical to upstream and carries no plugins); ② this build flips
+> `plugins.enabled` to `true` by default, so WorkBuddy / Trae / Qoder / ZCode / MiMo are available
+> on first launch — if they are missing, check `plugins.enabled` in `cpa-core/config.yaml` and
+> restart the core (the GUI has no toggle for it); ③ the installer is not code-signed, so Windows
+> SmartScreen may block it ("Run anyway"); ④ `portable-update-windows.json` is the manifest the
+> in-app updater fetches on its own — there is nothing to download or import by hand.
 
 <p align="center">
   <img src="src/assets/logo.jpg" width="112" alt="EasyCLIProxyAPI Logo">

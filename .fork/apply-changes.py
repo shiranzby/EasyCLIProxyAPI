@@ -23,6 +23,22 @@ def replace(path, pairs):
         handle.write(text)
     print('patched %s (%s)' % (path, 'crlf' if eol == '\r\n' else 'lf'))
 
+# --- Plugins on by default ---------------------------------------------------
+# Upstream defaults `plugins.enabled` to false, and the GUI exposes no toggle for
+# it. This build ships cpa-multi-plugins, so a fresh install must load them -
+# otherwise the bundled providers never appear and the build looks broken.
+
+replace('src-tauri/src/main.rs', [
+    (
+        '            plugins_enabled: false,\n'
+        '            routing_strategy: "round-robin".to_string(),',
+        '            // This build ships cpa-multi-plugins and the GUI has no toggle for\n'
+        '            // plugins.enabled, so load them by default.\n'
+        '            plugins_enabled: true,\n'
+        '            routing_strategy: "round-robin".to_string(),',
+    ),
+])
+
 OLD_REPO = 'router-for-me/EasyCLIProxyAPI'
 NEW_REPO = 'shiranzby/EasyCLIProxyAPI'
 
