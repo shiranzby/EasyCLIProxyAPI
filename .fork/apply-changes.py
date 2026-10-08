@@ -57,36 +57,6 @@ replace('src-tauri/src/app_update.rs', [
     ('"/%s/releases/tag/v"' % OLD_REPO, '"/%s/releases/tag/v"' % NEW_REPO),
 ])
 
-replace('src/pages/ManagementPages.tsx', [
-    ("type OAuthProviderId = 'codex' | 'claude' | 'antigravity' | 'kimi' | 'xai' | 'devin';",
-     "type OAuthProviderId =\n"
-     "  | 'codex'\n"
-     "  | 'claude'\n"
-     "  | 'antigravity'\n"
-     "  | 'kimi'\n"
-     "  | 'xai'\n"
-     "  | 'devin'\n"
-     "  | 'workbuddy'\n"
-     "  | 'trae'\n"
-     "  | 'qoder'\n"
-     "  | 'zcode'\n"
-     "  | 'mimo';"),
-    ("import kimiIcon from '../assets/icons/kimi-light.svg';",
-     "import kimiIcon from '../assets/icons/kimi-light.svg';\n"
-     "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
-     "import traeIcon from '../assets/icons/trae.svg';\n"
-     "import qoderIcon from '../assets/icons/qoder.svg';\n"
-     "import zcodeIcon from '../assets/icons/zcode.png';\n"
-     "import mimoIcon from '../assets/icons/mimo.svg';"),
-    ("  { id: 'devin' as const, name: 'Devin OAuth', icon: devinIcon },\n];",
-     "  { id: 'devin' as const, name: 'Devin OAuth', icon: devinIcon },\n"
-     "  { id: 'workbuddy' as const, name: 'WorkBuddy OAuth', icon: workbuddyIcon },\n"
-     "  { id: 'trae' as const, name: 'Trae OAuth', icon: traeIcon },\n"
-     "  { id: 'qoder' as const, name: 'Qoder OAuth', icon: qoderIcon },\n"
-     "  { id: 'zcode' as const, name: 'ZCode OAuth', icon: zcodeIcon },\n"
-     "  { id: 'mimo' as const, name: 'MiMo OAuth', icon: mimoIcon },\n"
-     "];"),
-])
 
 PLUGIN_ICON_IMPORTS = (
     "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
@@ -108,6 +78,7 @@ replace('src/pages/AuthFileManagementPage.tsx', [
      "  vertex: vertexIcon,\n"
      "  xai: grokIcon,\n"
      "  devin: devinIcon,\n"
+     "  meta: metaIcon,\n"
      "};",
      "const providerIcons: Record<string, string> = {\n"
      "  antigravity: antigravityIcon,\n"
@@ -118,6 +89,7 @@ replace('src/pages/AuthFileManagementPage.tsx', [
      "  vertex: vertexIcon,\n"
      "  xai: grokIcon,\n"
      "  devin: devinIcon,\n"
+     "  meta: metaIcon,\n"
      "  workbuddy: workbuddyIcon,\n"
      "  trae: traeIcon,\n"
      "  qoder: qoderIcon,\n"
@@ -568,10 +540,6 @@ replace('src-tauri/src/main.rs', [
     ),
 ])
 
-replace('src-tauri/capabilities/default.json', [
-    ('    "dialog:allow-open"', '    "dialog:allow-open",\n    "dialog:allow-save"'),
-])
-
 replace('src/pages/AuthFileManagementPage.tsx', [
     (
         "import {\n"
@@ -718,9 +686,9 @@ replace('src/pages/AuthFileManagementPage.tsx', [
         "  const toggleStatus = async (file: AuthFile) => {",
     ),
     (
-        "                    <button type=\"button\" className=\"icon-button danger\" onClick={() => void deleteFile(file)}",
-        "                    <button type=\"button\" className=\"icon-button quiet\" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden=\"true\" /></button>\n"
-        "                    <button type=\"button\" className=\"icon-button danger\" onClick={() => void deleteFile(file)}",
+        "                      <button type=\"button\" className=\"auth-list-action danger\" onClick={() => void deleteFile(file)}",
+        "                      <button type=\"button\" className=\"auth-list-action\" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden=\"true\" /></button>\n"
+        "                      <button type=\"button\" className=\"auth-list-action danger\" onClick={() => void deleteFile(file)}",
     ),
     (
         "import { useConfirmation } from '../components/ConfirmationDialog';",

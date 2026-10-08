@@ -1,16 +1,3 @@
-diff --git a/src-tauri/capabilities/default.json b/src-tauri/capabilities/default.json
-index 3ddf213..da27db7 100644
---- a/src-tauri/capabilities/default.json
-+++ b/src-tauri/capabilities/default.json
-@@ -10,6 +10,7 @@
-     "core:window:allow-theme",
-     "core:window:allow-set-background-color",
-     "core:webview:allow-set-webview-background-color",
--    "dialog:allow-open"
-+    "dialog:allow-open",
-+    "dialog:allow-save"
-   ]
- }
 diff --git a/src-tauri/src/app_update.rs b/src-tauri/src/app_update.rs
 index c5a6f28..793d8f1 100644
 --- a/src-tauri/src/app_update.rs
@@ -25,10 +12,10 @@ index c5a6f28..793d8f1 100644
          return Err("Untrusted application update release URL".to_string());
      }
 diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
-index dca3d5a..7bdaa99 100644
+index 2546a9e..fbc2e81 100644
 --- a/src-tauri/src/main.rs
 +++ b/src-tauri/src/main.rs
-@@ -103,13 +103,13 @@ const RELEASE_ATOM_URL: &str = "https://github.com/router-for-me/CLIProxyAPI/rel
+@@ -104,13 +104,13 @@ const RELEASE_ATOM_URL: &str = "https://github.com/router-for-me/CLIProxyAPI/rel
  const RELEASE_DOWNLOAD_PREFIX: &str =
      "https://github.com/router-for-me/CLIProxyAPI/releases/download/";
  #[cfg(windows)]
@@ -46,8 +33,8 @@ index dca3d5a..7bdaa99 100644
  #[cfg(windows)]
  const APP_UPDATE_MANIFEST_NAME: &str = "portable-update-windows.json";
  #[cfg(target_os = "linux")]
-@@ -920,7 +920,9 @@ impl Default for GuiConfigFile {
-             usage_statistics_enabled: true,
+@@ -926,7 +926,9 @@ impl Default for GuiConfigFile {
+             usage_statistics_disabled: None,
              redis_usage_queue_retention_seconds: DEFAULT_REDIS_USAGE_QUEUE_RETENTION_SECONDS,
              request_log: false,
 -            plugins_enabled: false,
@@ -57,16 +44,16 @@ index dca3d5a..7bdaa99 100644
              routing_strategy: "round-robin".to_string(),
              proxy_url: String::new(),
              proxy_override: false,
-@@ -2685,6 +2687,7 @@ fn main() {
-             management_api::management_request,
-             provider_health::provider_health_probe,
+@@ -2720,6 +2722,7 @@ fn main() {
+             provider_health::get_core_models,
+             provider_health::core_health_probe,
              management_api::upload_auth_file,
 +            management_api::export_auth_file,
              management_api::open_auth_files_directory,
              management_api::open_core_logs_directory,
              set_core_plugins_enabled,
 diff --git a/src-tauri/src/management_api.rs b/src-tauri/src/management_api.rs
-index 93b85b8..473941c 100644
+index ca06244..af3d140 100644
 --- a/src-tauri/src/management_api.rs
 +++ b/src-tauri/src/management_api.rs
 @@ -10,7 +10,7 @@ use std::{
@@ -78,7 +65,7 @@ index 93b85b8..473941c 100644
      process::{Command, Stdio},
      sync::LazyLock,
      time::Duration,
-@@ -127,6 +127,36 @@ pub(crate) async fn upload_auth_file(
+@@ -157,6 +157,36 @@ pub(crate) async fn upload_auth_file(
      read_management_value(response).await
  }
  
@@ -115,7 +102,7 @@ index 93b85b8..473941c 100644
  #[tauri::command]
  pub(crate) fn open_auth_files_directory(
      gui_config_state: tauri::State<'_, GuiConfigState>,
-@@ -352,6 +382,10 @@ pub(crate) fn management_endpoint(config: &GuiConfigFile, path: &str) -> Result<
+@@ -397,6 +427,10 @@ pub(crate) fn management_endpoint(config: &GuiConfigFile, path: &str) -> Result<
          config.port,
          current_core_tls_settings()?.enabled,
      );
@@ -155,10 +142,10 @@ index 0000000..a64bd48
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Trae</title><path d="M7 6h10v2.2H7V6zm3.9 0h2.2v12h-2.2V6z"/></svg>
 diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
-index 3052237..85fc2ad 100644
+index 4482133..5f9f32a 100644
 --- a/src/i18n/ja.ts
 +++ b/src/i18n/ja.ts
-@@ -1699,4 +1699,15 @@ export const jaOverrides = {
+@@ -1919,4 +1919,15 @@ export const jaOverrides = {
    'quota.service.error.unrecognized': '上流からクォータデータが返されましたが、形式を認識できません',
    'quota.service.error.codexResetOnly': 'リセットクォータを使用できるのは Codex 認証情報のみです',
    'quota.service.error.missingConsumeAuthIndex': 'auth-index がないためリセットクォータを使用できません',
@@ -175,10 +162,10 @@ index 3052237..85fc2ad 100644
 +  'quota.plugin.checkinDetail': '本日 +{today} · 累計 {total} · {streak} 日連続',
  } satisfies Record<MessageKey, string>;
 diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
-index 62dc510..b48e703 100644
+index ca1d0b2..b674185 100644
 --- a/src/i18n/locales/en.ts
 +++ b/src/i18n/locales/en.ts
-@@ -1699,4 +1699,15 @@ export const en: Record<MessageKey, string> = {
+@@ -1919,4 +1919,15 @@ export const en: Record<MessageKey, string> = {
    'quota.service.error.unrecognized': 'Upstream returned quota data in an unrecognized format',
    'quota.service.error.codexResetOnly': 'Only Codex credentials support reset credits',
    'quota.service.error.missingConsumeAuthIndex': 'Missing auth-index; the reset credit cannot be used',
@@ -195,10 +182,10 @@ index 62dc510..b48e703 100644
 +  'quota.plugin.checkinDetail': '+{today} today · {total} total · {streak} day streak',
  };
 diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
-index c58df9f..912a9c8 100644
+index c8307ef..0175e25 100644
 --- a/src/i18n/locales/zh-CN.ts
 +++ b/src/i18n/locales/zh-CN.ts
-@@ -1698,6 +1698,17 @@ export const zhCN = {
+@@ -1918,6 +1918,17 @@ export const zhCN = {
    'quota.service.error.unrecognized': '上游返回了配额数据，但无法识别',
    'quota.service.error.codexResetOnly': '只有 Codex 凭据支持使用重置额度',
    'quota.service.error.missingConsumeAuthIndex': '缺少 auth-index，无法使用重置额度',
@@ -217,7 +204,7 @@ index c58df9f..912a9c8 100644
  
  export type MessageKey = keyof typeof zhCN;
 diff --git a/src/pages/AuthFileManagementPage.tsx b/src/pages/AuthFileManagementPage.tsx
-index 50c4d08..08333a1 100644
+index e4c00d5..282d813 100644
 --- a/src/pages/AuthFileManagementPage.tsx
 +++ b/src/pages/AuthFileManagementPage.tsx
 @@ -1,4 +1,5 @@
@@ -226,7 +213,7 @@ index 50c4d08..08333a1 100644
  import { useConfirmation } from '../components/ConfirmationDialog';
  import { QuotaActionFeedback } from '../components/QuotaActionFeedback';
  import { AuthFileQuotaPanel } from '../components/AuthFileQuotaPanel';
-@@ -30,9 +31,15 @@ import geminiIcon from '../assets/icons/gemini.svg';
+@@ -34,10 +35,16 @@ import geminiIcon from '../assets/icons/gemini.svg';
  import grokIcon from '../assets/icons/grok.svg';
  import devinIcon from '../assets/icons/devin.svg';
  import kimiIcon from '../assets/icons/kimi-light.svg';
@@ -235,6 +222,7 @@ index 50c4d08..08333a1 100644
 +import qoderIcon from '../assets/icons/qoder.svg';
 +import zcodeIcon from '../assets/icons/zcode.png';
 +import mimoIcon from '../assets/icons/mimo.svg';
+ import metaIcon from '../assets/icons/meta.svg';
  import vertexIcon from '../assets/icons/vertex.svg';
  import {
    formatDate,
@@ -242,10 +230,10 @@ index 50c4d08..08333a1 100644
    managementApi,
    readBoolean,
    readNumber,
-@@ -88,6 +95,86 @@ const providerIcons: Record<string, string> = {
-   vertex: vertexIcon,
+@@ -101,6 +108,86 @@ const providerIcons: Record<string, string> = {
    xai: grokIcon,
    devin: devinIcon,
+   meta: metaIcon,
 +  workbuddy: workbuddyIcon,
 +  trae: traeIcon,
 +  qoder: qoderIcon,
@@ -329,7 +317,7 @@ index 50c4d08..08333a1 100644
  };
  
  const providerName = (file: AuthFile) => {
-@@ -294,8 +381,7 @@ export function AuthFileManagementPage() {
+@@ -390,8 +477,7 @@ export function AuthFileManagementPage() {
      const failures: string[] = [];
      for (const file of selected) {
        try {
@@ -339,7 +327,7 @@ index 50c4d08..08333a1 100644
        } catch (requestError) {
          failures.push(`${file.name}：${String(requestError)}`);
        }
-@@ -311,6 +397,31 @@ export function AuthFileManagementPage() {
+@@ -407,6 +493,31 @@ export function AuthFileManagementPage() {
      }
    };
  
@@ -371,67 +359,19 @@ index 50c4d08..08333a1 100644
    const toggleStatus = async (file: AuthFile) => {
      feedback.clearNotice();
      setBusy(true);
-@@ -453,6 +564,7 @@ export function AuthFileManagementPage() {
-                     {providerKey(file) ? <button type="button" className="secondary-button compact-button" onClick={() => setModelViewName(name)} disabled={busy} title={t('authFiles.models.viewTitle')}>{t('authFiles.models.button')}</button> : null}
-                     <button type="button" className="icon-button quiet" onClick={() => void copyName(name)} disabled={busy} title={t('authFiles.copyName')} aria-label={t('authFiles.copyName')}>{copied === name ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}</button>
-                     <button type="button" className={`${disabled ? 'primary-button' : 'secondary-button'} compact-button auth-card-toggle`} onClick={() => void toggleStatus(file)} disabled={busy || !isOAuthCredentialFile(file)} title={isOAuthCredentialFile(file) ? undefined : t('authFiles.fileOnly')}>{disabled ? t('common.enable') : t('common.disable')}</button>
-+                    <button type="button" className="icon-button quiet" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden="true" /></button>
-                     <button type="button" className="icon-button danger" onClick={() => void deleteFile(file)} disabled={busy || isRuntimeOnly(file)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={15} aria-hidden="true" /></button>
-                   </footer>
-                 </article>
-diff --git a/src/pages/ManagementPages.tsx b/src/pages/ManagementPages.tsx
-index fefaefb..98e5067 100644
---- a/src/pages/ManagementPages.tsx
-+++ b/src/pages/ManagementPages.tsx
-@@ -14,6 +14,11 @@ import codexIcon from '../assets/icons/codex.svg';
- import grokIcon from '../assets/icons/grok.svg';
- import devinIcon from '../assets/icons/devin.svg';
- import kimiIcon from '../assets/icons/kimi-light.svg';
-+import workbuddyIcon from '../assets/icons/workbuddy.png';
-+import traeIcon from '../assets/icons/trae.svg';
-+import qoderIcon from '../assets/icons/qoder.svg';
-+import zcodeIcon from '../assets/icons/zcode.png';
-+import mimoIcon from '../assets/icons/mimo.svg';
- import { useI18n } from '../i18n';
- import { FloatingNotice, useAppNotice } from '../appNotice';
- import { oauthSubpages, type OAuthSubpage } from '../oauthNavigation';
-@@ -32,7 +37,18 @@ import { QuotaPage } from './QuotaPage';
- import { validateDevinCallback } from '../services/devinOAuth';
- import { handleHorizontalTabKey } from '../components/tabKeyboardNavigation';
- 
--type OAuthProviderId = 'codex' | 'claude' | 'antigravity' | 'kimi' | 'xai' | 'devin';
-+type OAuthProviderId =
-+  | 'codex'
-+  | 'claude'
-+  | 'antigravity'
-+  | 'kimi'
-+  | 'xai'
-+  | 'devin'
-+  | 'workbuddy'
-+  | 'trae'
-+  | 'qoder'
-+  | 'zcode'
-+  | 'mimo';
- type OAuthFlowStatus = 'idle' | 'waiting' | 'success' | 'error';
- 
- type OAuthProviderState = {
-@@ -72,6 +88,11 @@ const oauthProviders = [
-   { id: 'kimi' as const, name: 'Kimi OAuth', icon: kimiIcon },
-   { id: 'xai' as const, name: 'xAI OAuth', icon: grokIcon },
-   { id: 'devin' as const, name: 'Devin OAuth', icon: devinIcon },
-+  { id: 'workbuddy' as const, name: 'WorkBuddy OAuth', icon: workbuddyIcon },
-+  { id: 'trae' as const, name: 'Trae OAuth', icon: traeIcon },
-+  { id: 'qoder' as const, name: 'Qoder OAuth', icon: qoderIcon },
-+  { id: 'zcode' as const, name: 'ZCode OAuth', icon: zcodeIcon },
-+  { id: 'mimo' as const, name: 'MiMo OAuth', icon: mimoIcon },
- ];
- 
- const OAUTH_CALLBACK_SUPPORTED = new Set<OAuthProviderId>([
+@@ -580,6 +691,7 @@ export function AuthFileManagementPage() {
+                       <button type="button" className="auth-list-action" onClick={() => setSettingsName(name)} disabled={busy || resettingCooldown || !isOAuthCredentialFile(file)} title={t(isOAuthCredentialFile(file) ? 'authFiles.settings.title' : 'authFiles.fileOnly')} aria-label={t('authFiles.settings.title')}><Settings2 size={15} aria-hidden="true" /></button>
+                       <button type="button" className="auth-list-action" onClick={() => setModelViewName(name)} disabled={busy || !providerKey(file)} title={t('authFiles.models.viewTitle')} aria-label={t('authFiles.models.viewTitle')}><Network size={15} aria-hidden="true" /></button>
+                       <button type="button" className="auth-list-action muted" onClick={() => void copyName(name)} disabled={busy} title={t('authFiles.copyName')} aria-label={t('authFiles.copyName')}>{copied === name ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}</button>
++                      <button type="button" className="auth-list-action" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden="true" /></button>
+                       <button type="button" className="auth-list-action danger" onClick={() => void deleteFile(file)} disabled={busy || resettingCooldown || isRuntimeOnly(file)} title={t('common.delete')} aria-label={t('common.delete')}><Trash2 size={15} aria-hidden="true" /></button>
+                     </div>
+                     <div className="auth-list-main-actions">
 diff --git a/src/pages/QuotaPage.tsx b/src/pages/QuotaPage.tsx
-index 861e343..d8366be 100644
+index bd0b269..9b18793 100644
 --- a/src/pages/QuotaPage.tsx
 +++ b/src/pages/QuotaPage.tsx
-@@ -11,6 +11,7 @@ import codexIcon from '../assets/icons/codex.svg';
+@@ -13,6 +13,7 @@ import codexIcon from '../assets/icons/codex.svg';
  import grokIcon from '../assets/icons/grok.svg';
  import devinIcon from '../assets/icons/devin.svg';
  import kimiIcon from '../assets/icons/kimi-light.svg';
@@ -439,7 +379,7 @@ index 861e343..d8366be 100644
  import { managementApi, readBoolean, responseList } from '../services/managementApi';
  import { formatQuotaReset, useQuotaClock } from '../services/quotaTime';
  import {
-@@ -42,9 +43,10 @@ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
+@@ -45,9 +46,10 @@ const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {
    xai: { label: 'xAI', icon: grokIcon },
    devin: { label: 'Devin', icon: devinIcon },
    antigravity: { label: 'Antigravity', icon: antigravityIcon },
@@ -452,10 +392,10 @@ index 861e343..d8366be 100644
  
  export function QuotaPage() {
 diff --git a/src/services/managementApi.ts b/src/services/managementApi.ts
-index fb7dc57..c5fde0b 100644
+index bd73208..fb7b5bd 100644
 --- a/src/services/managementApi.ts
 +++ b/src/services/managementApi.ts
-@@ -253,6 +253,12 @@ export const managementApi = {
+@@ -89,6 +89,12 @@ export const managementApi = {
        data,
      });
    },
@@ -469,10 +409,10 @@ index fb7dc57..c5fde0b 100644
  };
  
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
-index c9b1745..86049b3 100644
+index 4bbbdb6..f3ffc39 100644
 --- a/src/services/quotaService.ts
 +++ b/src/services/quotaService.ts
-@@ -18,7 +18,14 @@ const quotaText = (
+@@ -22,7 +22,14 @@ const quotaText = (
  ) => translate(getCurrentLocale(), key, variables);
  
  export type AuthFile = Record<string, unknown>;
@@ -488,7 +428,7 @@ index c9b1745..86049b3 100644
  export type QuotaStatus = 'idle' | 'loading' | 'success' | 'error';
  export type QuotaRow = {
    label: string;
-@@ -52,6 +59,8 @@ const endpointByProvider: Record<QuotaProvider, string> = {
+@@ -60,6 +67,8 @@ const endpointByProvider: Record<QuotaProvider, string> = {
    kimi: 'https://api.kimi.com/coding/v1/usages',
    xai: 'https://cli-chat-proxy.grok.com/v1/billing',
    antigravity: 'https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary',
@@ -497,7 +437,7 @@ index c9b1745..86049b3 100644
  };
  
  const CLAUDE_PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile';
-@@ -88,10 +97,16 @@ const headersByProvider: Record<QuotaProvider, Record<string, string>> = {
+@@ -96,10 +105,16 @@ const headersByProvider: Record<QuotaProvider, Record<string, string>> = {
      'Content-Type': 'application/json',
      'User-Agent': 'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)',
    },
@@ -514,7 +454,7 @@ index c9b1745..86049b3 100644
    if (value === 'x-ai' || value === 'grok') return 'xai';
    if (value === 'cognition') return 'devin';
    if (value === 'anthropic') return 'claude';
-@@ -836,6 +851,86 @@ const callCodexResetCredits = async (
+@@ -864,6 +879,86 @@ const callCodexResetCredits = async (
    return codexResetCreditDetailsFor(payload);
  };
  
@@ -601,7 +541,7 @@ index c9b1745..86049b3 100644
  async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    const provider = providerForFile(file);
    if (!provider) {
-@@ -847,6 +942,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+@@ -875,6 +970,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    }
    try {
      if (booleanValue(file.disabled) === true) throw new Error(quotaText('quota.fileDisabled'));
