@@ -335,7 +335,39 @@ replace('src/services/quotaService.ts', [
 replace('src/pages/QuotaPage.tsx', [
     ("import kimiIcon from '../assets/icons/kimi-light.svg';",
      "import kimiIcon from '../assets/icons/kimi-light.svg';\n"
-     "import pluginIcon from '../assets/icons/plugin.svg';"),
+     "import pluginIcon from '../assets/icons/plugin.svg';\n"
+     "import workbuddyIcon from '../assets/icons/workbuddy.png';\n"
+     "import traeIcon from '../assets/icons/trae.png';\n"
+     "import qoderIcon from '../assets/icons/qoder.png';\n"
+     "import zcodeIcon from '../assets/icons/zcode.png';\n"
+     "import mimoIcon from '../assets/icons/mimo.png';"),
+    ("import { managementApi, readBoolean, responseList } from '../services/managementApi';",
+     "import { managementApi, readBoolean, readString, responseList } from '../services/managementApi';"),
+    ("const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {",
+     "// Every bundled plugin shares the single `plugin` quota provider, so the group icon\n"
+     "// (a generic puzzle) says nothing about which provider a credential belongs to. Show\n"
+     "// the credential's own plugin logo, and keep the group icon only as a fallback for\n"
+     "// plugins that ship no bundled logo.\n"
+     "const PLUGIN_CARD_ICONS: Record<string, string> = {\n"
+     "  workbuddy: workbuddyIcon,\n"
+     "  trae: traeIcon,\n"
+     "  qoder: qoderIcon,\n"
+     "  zcode: zcodeIcon,\n"
+     "  mimo: mimoIcon,\n"
+     "};\n"
+     "\n"
+     "const cardIcon = (provider: QuotaProvider | null, file: AuthFile): string => {\n"
+     "  if (provider === 'plugin') {\n"
+     "    const pluginId = readString(file, 'provider', 'type', 'account_type').toLowerCase().replace(/_/g, '-');\n"
+     "    const own = PLUGIN_CARD_ICONS[pluginId];\n"
+     "    if (own) return own;\n"
+     "  }\n"
+     "  return provider ? providerMeta[provider].icon : '';\n"
+     "};\n"
+     "\n"
+     "const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {"),
+    ("          <img src={provider ? providerMeta[provider].icon : ''} alt=\"\" className=\"quota-account-icon\" />",
+     "          <img src={cardIcon(provider, file)} alt=\"\" className=\"quota-account-icon\" />"),
     ("  antigravity: { label: 'Antigravity', icon: antigravityIcon },\n};",
      "  antigravity: { label: 'Antigravity', icon: antigravityIcon },\n"
      "  plugin: { label: 'Plugins', icon: pluginIcon },\n};"),
