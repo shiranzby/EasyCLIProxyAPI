@@ -104,7 +104,7 @@ jobs:
 
       - name: Apply CPA plugin patch
         shell: bash
-        run: git -C app apply --whitespace=nowarn "$GITHUB_WORKSPACE/fork/.fork/cpa-plugins.patch"
+        run: git -C app apply --whitespace=nowarn --binary "$GITHUB_WORKSPACE/fork/.fork/cpa-plugins.patch"
 
       - name: Resolve package stem
         id: package
