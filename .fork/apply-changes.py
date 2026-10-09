@@ -377,6 +377,7 @@ replace('src/pages/QuotaPage.tsx', [
 
 QUOTA_MESSAGES = {
     'src/i18n/locales/zh-CN.ts': [
+        ("'quota.plugin.noPackages': '插件未上报可用套餐',"),
         ("'quota.plugin.packages': '套餐额度',"),
         ("'quota.plugin.packagesDetail': '剩余 {remain} / 共 {size} · {count} 个套餐包',"),
         ("'quota.plugin.regionDetail': '剩余 {remain} / 共 {size}',"),
@@ -386,6 +387,7 @@ QUOTA_MESSAGES = {
         ("'quota.plugin.rateLimited': '查询过于频繁，请稍后再试',"),
     ],
     'src/i18n/locales/en.ts': [
+        ("'quota.plugin.noPackages': 'Plugin reported no usable plan',"),
         ("'quota.plugin.packages': 'Package quota',"),
         ("'quota.plugin.packagesDetail': '{remain} of {size} left · {count} packages',"),
         ("'quota.plugin.regionDetail': '{remain} of {size} left',"),
@@ -395,6 +397,7 @@ QUOTA_MESSAGES = {
         ("'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',"),
     ],
     'src/i18n/ja.ts': [
+        ("'quota.plugin.noPackages': 'プラグインは利用可能なプランを報告していません',"),
         ("'quota.plugin.packages': 'パッケージ枠',"),
         ("'quota.plugin.packagesDetail': '残り {remain} / {size} · {count} パッケージ',"),
         ("'quota.plugin.regionDetail': '残り {remain} / {size}',"),
@@ -561,7 +564,16 @@ replace('src/services/quotaService.ts', [
         "      }),\n"
         "    });\n"
         "  }\n"
-        "  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));\n"
+        "  // The plugin answered, it just has no quota figures for this account - a\n"
+        "  // ZAI coding plan without packs, for example. Keep the card by emitting a\n"
+        "  // row that says so; nothing here is unreadable.\n"
+        "  if (rows.length === 0) {\n"
+        "    rows.push({\n"
+        "      label: quotaText('quota.plugin.packages'),\n"
+        "      remainingPercent: null,\n"
+        "      detail: quotaText('quota.plugin.noPackages'),\n"
+        "    });\n"
+        "  }\n"
         "  return {\n"
         "    status: 'success',\n"
         "    rows,\n"
