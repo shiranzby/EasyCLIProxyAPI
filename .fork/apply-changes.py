@@ -410,6 +410,17 @@ QUOTA_MESSAGES = {
 ANCHOR = "'quota.service.error.missingConsumeAuthIndex'"
 
 
+def write_new(path, content):
+    """Create a file the fork adds (upstream has no such file to patch)."""
+    full = os.path.join(ROOT, path)
+    if os.path.exists(full):
+        print('  already exists %s' % path)
+        return
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(content)
+    print('created %s' % path)
+
 def append_messages(path, lines):
     full = os.path.join(ROOT, path)
     with open(full, 'r', encoding='utf-8', newline='') as handle:
@@ -639,6 +650,197 @@ replace('src/services/quotaService.ts', [
         "  if (!isRecord(payload)) throw new Error(quotaText('quota.service.error.noResponse'));\n",
     ),
 ])
+
+# --- One OAuth card per upstream ------------------------------------------------
+# zcode (zai / bigmodel) and workbuddy (cn / intl) each reach two upstreams. The
+# plugin config field only decides which upstream the NEXT login uses, and the
+# plugin's own description says existing accounts keep the upstream they were
+# logged in with - so the two coexist and deserve one card each. The region is
+# written immediately before starting that login: start_oauth_login takes no
+# region argument, so the order matters.
+
+write_new('src/services/pluginOAuthRegions.ts', """import type { PluginListEntry } from './plugins';
+
+export type PluginOAuthRegion = {
+  key: string;
+  field: string;
+  value: string;
+  label: string;
+};
+
+type RegionDefinition = {
+  field: string;
+  values: { value: string; label: string }[];
+};
+
+// CN entries come first: they are the ones used most.
+const REGION_DEFINITIONS: Record<string, RegionDefinition> = {
+  zcode: {
+    field: 'login_provider',
+    values: [
+      { value: 'bigmodel', label: '智谱' },
+      { value: 'zai', label: 'Z.AI' },
+    ],
+  },
+  workbuddy: {
+    field: 'login_region',
+    values: [
+      { value: 'cn', label: '国内' },
+      { value: 'intl', label: '国际' },
+    ],
+  },
+};
+
+/** Regions to offer for a plugin, or [] to keep the plain single card. */
+export function pluginOAuthRegions(plugin: PluginListEntry): PluginOAuthRegion[] {
+  const definition = REGION_DEFINITIONS[plugin.id];
+  if (!definition) return [];
+  // Only split when the running plugin really declares that field, so a plugin
+  // that drops it keeps working as one card.
+  const declared = plugin.configFields.some(
+    field => field.name === definition.field && field.enumValues.length > 0,
+  );
+  if (!declared) return [];
+  return definition.values.map(entry => ({
+    key: `${plugin.id}:${entry.value}`,
+    field: definition.field,
+    value: entry.value,
+    label: entry.label,
+  }));
+}
+""")
+
+replace('src/pages/PluginOAuthDialog.tsx', [
+    (
+        "import { pluginOAuthText, type PluginOAuthMessage } from '../i18n/pluginOAuth';",
+        "import { pluginOAuthText, type PluginOAuthMessage } from '../i18n/pluginOAuth';\n"
+        "import { pluginsApi } from '../services/plugins';\n"
+        "import type { PluginOAuthRegion } from '../services/pluginOAuthRegions';",
+    ),
+    (
+        "export function PluginOAuthDialog({ plugin, browser = 'default', onClose, onCompleted }: {\n"
+        "  plugin: PluginListEntry;\n"
+        "  browser?: string;\n"
+        "  onClose: () => void;\n"
+        "  onCompleted: () => void;\n"
+        "}) {",
+        "export function PluginOAuthDialog({ plugin, region, browser = 'default', onClose, onCompleted }: {\n"
+        "  plugin: PluginListEntry;\n"
+        "  region?: PluginOAuthRegion | null;\n"
+        "  browser?: string;\n"
+        "  onClose: () => void;\n"
+        "  onCompleted: () => void;\n"
+        "}) {\n"
+        "  // The dialog owns the region write: the login must not start until the\n"
+        "  // plugin config already points at this card's upstream.\n"
+        "  const [regionReady, setRegionReady] = useState(!region);\n"
+        "  const [regionFailed, setRegionFailed] = useState(false);\n"
+        "  useEffect(() => {\n"
+        "    if (!region) return;\n"
+        "    let active = true;\n"
+        "    void pluginsApi.patchConfig(plugin.id, { [region.field]: region.value })\n"
+        "      .then(() => { if (active) setRegionReady(true); })\n"
+        "      .catch(() => { if (active) setRegionFailed(true); });\n"
+        "    return () => { active = false; };\n"
+        "  }, [plugin.id, region]);",
+    ),
+    (
+        "    if (!plugin.supportsOAuth || !plugin.effectiveEnabled || !provider) {\n"
+        "      fail(translate('unavailable'));\n"
+        "      return stop;\n"
+        "    }\n",
+        "    if (!plugin.supportsOAuth || !plugin.effectiveEnabled || !provider) {\n"
+        "      fail(translate('unavailable'));\n"
+        "      return stop;\n"
+        "    }\n"
+        "    // A region card must not log in before its upstream reached the plugin\n"
+        "    // config, otherwise the token would come from the other region.\n"
+        "    if (regionFailed) { fail(translate('failed')); return stop; }\n"
+        "    if (!regionReady) { return stop; }\n",
+    ),
+    (
+        "  }, [provider, plugin.supportsOAuth, plugin.effectiveEnabled, attempt]);",
+        "  }, [provider, plugin.supportsOAuth, plugin.effectiveEnabled, attempt, regionReady, regionFailed]);",
+    ),
+])
+
+replace('src/pages/PluginOAuthProviders.tsx', [
+    (
+        "import { collectPluginOAuthProviders } from '../services/pluginOAuthProviders';",
+        "import { collectPluginOAuthProviders } from '../services/pluginOAuthProviders';\n"
+        "import { pluginOAuthRegions, type PluginOAuthRegion } from '../services/pluginOAuthRegions';",
+    ),
+    (
+        "  const selectedPlugin = plugins.find(plugin => plugin.oauthProvider === selectedProvider);",
+        "  // One card per upstream for multi-region plugins (zcode, workbuddy); other\n"
+        "  // plugins keep their single card. CN regions are listed first.\n"
+        "  const cards = plugins.flatMap(plugin => {\n"
+        "    const regions = pluginOAuthRegions(plugin);\n"
+        "    if (!regions.length) return [{ plugin, region: null as PluginOAuthRegion | null, key: plugin.id }];\n"
+        "    return regions.map(region => ({ plugin, region, key: region.key }));\n"
+        "  });\n"
+        "  const selectedCard = cards.find(card => card.key === selectedProvider);\n"
+        "  const selectedPlugin = selectedCard?.plugin;",
+    ),
+    (
+        "        setSelectedProvider(previous => next.some(plugin => plugin.oauthProvider === previous) ? previous : null);",
+        "        setSelectedProvider(previous => previous && next.some(plugin =>\n"
+        "          plugin.id === previous || pluginOAuthRegions(plugin).some(region => region.key === previous)\n"
+        "        ) ? previous : null);",
+    ),
+    (
+        "    {plugins.map(plugin => {\n"
+        "      const provider = plugin.oauthProvider!;\n"
+        "      const authorized = completed.has(provider);\n"
+        "      return <section className=\"panel oauth-card\" key={provider}>\n",
+        "    {cards.map(({ plugin, region, key }) => {\n"
+        "      const provider = plugin.oauthProvider!;\n"
+        "      const authorized = completed.has(key);\n"
+        "      return <section className=\"panel oauth-card\" key={key}>\n",
+    ),
+    (
+        "            <h2>{pluginOAuthText('providerTitle', locale).replace('{name}', getPluginTitle(plugin))}</h2>\n"
+        "            {authorized && <span className=\"state-pill success\">{t('oauth.status.completed')}</span>}",
+        "            <h2>{pluginOAuthText('providerTitle', locale).replace('{name}', getPluginTitle(plugin))}</h2>\n"
+        "            {region && <p className=\"oauth-card-region\">{region.label}</p>}\n"
+        "            {authorized && <span className=\"state-pill success\">{t('oauth.status.completed')}</span>}",
+    ),
+    (
+        "          <button type=\"button\" className=\"primary-button\" onClick={() => setSelectedProvider(provider)}>",
+        "          <button type=\"button\" className=\"primary-button\" onClick={() => setSelectedProvider(key)}>",
+    ),
+    (
+        "    {selectedPlugin && <PluginOAuthDialog\n"
+        "      key={selectedPlugin.oauthProvider}\n"
+        "      plugin={selectedPlugin}\n"
+        "      browser={browser}\n"
+        "      onClose={() => setSelectedProvider(null)}\n"
+        "      onCompleted={() => setCompleted(previous => new Set(previous).add(selectedPlugin.oauthProvider!))}\n"
+        "    />}",
+        "    {selectedCard && <PluginOAuthDialog\n"
+        "      key={selectedCard.key}\n"
+        "      plugin={selectedCard.plugin}\n"
+        "      region={selectedCard.region}\n"
+        "      browser={browser}\n"
+        "      onClose={() => setSelectedProvider(null)}\n"
+        "      onCompleted={() => setCompleted(previous => new Set(previous).add(selectedCard.key))}\n"
+        "    />}",
+    ),
+])
+
+replace('src/pages/PluginOAuthProviders.css', [
+    (
+        ".plugin-oauth-provider-status {",
+        ".oauth-card-region {\n"
+        "  margin: 2px 0 0;\n"
+        "  color: var(--text-secondary);\n"
+        "  font-size: var(--font-size-meta);\n"
+        "}\n"
+        "\n"
+        ".plugin-oauth-provider-status {",
+    ),
+])
+
 
 # --- Plugin OAuth cards: use the plugin's own logo ------------------------------
 # Upstream renders a generic puzzle glyph for every plugin card. Prefer the local
