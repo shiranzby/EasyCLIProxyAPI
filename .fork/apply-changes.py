@@ -581,7 +581,7 @@ replace('src/services/quotaService.ts', [
         "      ? readString(own, 'nickname')\n"
         "      : packCount > 0\n"
         "        ? quotaText('quota.plugin.packCount', { count: packCount })\n"
-        "        : undefined,\n"
+        "        : readString(own, 'plan') || undefined,\n"
         "    fetchedAt: Date.now(),\n"
         "  };\n"
         "}",
