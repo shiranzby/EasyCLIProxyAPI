@@ -189,10 +189,10 @@ index 0000000..8f1402f
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Plugins</title><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
 diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
-index 4482133..df84365 100644
+index 4482133..6d4ceb3 100644
 --- a/src/i18n/ja.ts
 +++ b/src/i18n/ja.ts
-@@ -1919,4 +1919,16 @@ export const jaOverrides = {
+@@ -1919,4 +1919,17 @@ export const jaOverrides = {
    'quota.service.error.unrecognized': '上流からクォータデータが返されましたが、形式を認識できません',
    'quota.service.error.codexResetOnly': 'リセットクォータを使用できるのは Codex 認証情報のみです',
    'quota.service.error.missingConsumeAuthIndex': 'auth-index がないためリセットクォータを使用できません',
@@ -201,6 +201,7 @@ index 4482133..df84365 100644
 +  'authFiles.exportFailed': 'エクスポートに失敗: {error}',
 +  'quota.plugin.pool': '全アカウント合計',
 +  'quota.plugin.poolDetail': '{count} アカウント · 残り {remain} / {size}',
++  'quota.plugin.noPackages': 'プラグインは利用可能なプランを報告していません',
 +  'quota.plugin.packages': 'パッケージ枠',
 +  'quota.plugin.packagesDetail': '残り {remain} / {size} · {count} パッケージ',
 +  'quota.plugin.regionDetail': '残り {remain} / {size}',
@@ -210,10 +211,10 @@ index 4482133..df84365 100644
 +  'quota.plugin.rateLimited': '照会が頻繁すぎます。少し待ってから再試行してください',
  } satisfies Record<MessageKey, string>;
 diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
-index ca1d0b2..cfb5e44 100644
+index ca1d0b2..611bb98 100644
 --- a/src/i18n/locales/en.ts
 +++ b/src/i18n/locales/en.ts
-@@ -1919,4 +1919,16 @@ export const en: Record<MessageKey, string> = {
+@@ -1919,4 +1919,17 @@ export const en: Record<MessageKey, string> = {
    'quota.service.error.unrecognized': 'Upstream returned quota data in an unrecognized format',
    'quota.service.error.codexResetOnly': 'Only Codex credentials support reset credits',
    'quota.service.error.missingConsumeAuthIndex': 'Missing auth-index; the reset credit cannot be used',
@@ -222,6 +223,7 @@ index ca1d0b2..cfb5e44 100644
 +  'authFiles.exportFailed': 'Export failed: {error}',
 +  'quota.plugin.pool': 'All accounts',
 +  'quota.plugin.poolDetail': '{count} accounts · {remain} of {size} left',
++  'quota.plugin.noPackages': 'Plugin reported no usable plan',
 +  'quota.plugin.packages': 'Package quota',
 +  'quota.plugin.packagesDetail': '{remain} of {size} left · {count} packages',
 +  'quota.plugin.regionDetail': '{remain} of {size} left',
@@ -231,10 +233,10 @@ index ca1d0b2..cfb5e44 100644
 +  'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',
  };
 diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
-index c8307ef..f1f124f 100644
+index c8307ef..05e6c27 100644
 --- a/src/i18n/locales/zh-CN.ts
 +++ b/src/i18n/locales/zh-CN.ts
-@@ -1918,6 +1918,18 @@ export const zhCN = {
+@@ -1918,6 +1918,19 @@ export const zhCN = {
    'quota.service.error.unrecognized': '上游返回了配额数据，但无法识别',
    'quota.service.error.codexResetOnly': '只有 Codex 凭据支持使用重置额度',
    'quota.service.error.missingConsumeAuthIndex': '缺少 auth-index，无法使用重置额度',
@@ -243,6 +245,7 @@ index c8307ef..f1f124f 100644
 +  'authFiles.exportFailed': '导出失败：{error}',
 +  'quota.plugin.pool': '账号池合计',
 +  'quota.plugin.poolDetail': '{count} 个账号 · 剩余 {remain} / 共 {size}',
++  'quota.plugin.noPackages': '插件未上报可用套餐',
 +  'quota.plugin.packages': '套餐额度',
 +  'quota.plugin.packagesDetail': '剩余 {remain} / 共 {size} · {count} 个套餐包',
 +  'quota.plugin.regionDetail': '剩余 {remain} / 共 {size}',
@@ -746,7 +749,7 @@ index 0000000..a7b73ab
 +  }));
 +}
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
-index 4bbbdb6..a4cc287 100644
+index 4bbbdb6..a07c891 100644
 --- a/src/services/quotaService.ts
 +++ b/src/services/quotaService.ts
 @@ -22,7 +22,14 @@ const quotaText = (
@@ -791,7 +794,7 @@ index 4bbbdb6..a4cc287 100644
    if (value === 'x-ai' || value === 'grok') return 'xai';
    if (value === 'cognition') return 'devin';
    if (value === 'anthropic') return 'claude';
-@@ -864,6 +879,133 @@ const callCodexResetCredits = async (
+@@ -864,6 +879,142 @@ const callCodexResetCredits = async (
    return codexResetCreditDetailsFor(payload);
  };
  
@@ -909,7 +912,16 @@ index 4bbbdb6..a4cc287 100644
 +      }),
 +    });
 +  }
-+  if (rows.length === 0) throw new Error(quotaText('quota.service.error.unrecognized'));
++  // The plugin answered, it just has no quota figures for this account - a
++  // ZAI coding plan without packs, for example. Keep the card by emitting a
++  // row that says so; nothing here is unreadable.
++  if (rows.length === 0) {
++    rows.push({
++      label: quotaText('quota.plugin.packages'),
++      remainingPercent: null,
++      detail: quotaText('quota.plugin.noPackages'),
++    });
++  }
 +  return {
 +    status: 'success',
 +    rows,
@@ -917,7 +929,7 @@ index 4bbbdb6..a4cc287 100644
 +      ? readString(own, 'nickname')
 +      : packCount > 0
 +        ? quotaText('quota.plugin.packCount', { count: packCount })
-+        : undefined,
++        : readString(own, 'plan') || undefined,
 +    fetchedAt: Date.now(),
 +  };
 +}
@@ -925,7 +937,7 @@ index 4bbbdb6..a4cc287 100644
  async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    const provider = providerForFile(file);
    if (!provider) {
-@@ -875,6 +1017,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
+@@ -875,6 +1026,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    }
    try {
      if (booleanValue(file.disabled) === true) throw new Error(quotaText('quota.fileDisabled'));
