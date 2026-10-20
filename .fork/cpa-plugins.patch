@@ -945,3 +945,129 @@ index 4bbbdb6..a07c891 100644
      const codexMetadata = provider === 'codex' ? codexMetadataFor(file) : undefined;
      const codexAccountId = codexMetadata?.accountId || '';
      const responseClock: { serverTimeOffsetMs?: number } = {};
+diff --git a/src-tauri/src/agents/commands.rs b/src-tauri/src/agents/commands.rs
+index 2eb0345..e157895 100644
+--- a/src-tauri/src/agents/commands.rs
++++ b/src-tauri/src/agents/commands.rs
+@@ -1,6 +1,11 @@
+ use super::*;
+ 
+ const AGENT_STATUS_DETECTION_CONCURRENCY: usize = 4;
++/// Value of the `client_version` query parameter that makes the kernel return its
++/// full model catalog instead of the bare `{id,object,owned_by}` list. The catalog
++/// is what carries `input_modalities` and `context_window`, so agent config writers
++/// must request it or every model looks text-only.
++const AGENT_MODEL_CATALOG_CLIENT_VERSION: &str = "cpa";
+ static CODEX_CATALOG_SYNC_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+ static CODEX_CATALOG_UPDATE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+ static CODEX_CATALOG_REFRESH: tokio::sync::Notify = tokio::sync::Notify::const_new();
+@@ -723,12 +728,64 @@ pub(crate) async fn fetch_agent_models(
+     api_key: &str,
+ ) -> Result<Vec<AgentModelOption>, String> {
+     let payload = fetch_agent_model_payload(port, api_key).await?;
+-    parse_agent_model_options(&payload)
++    let mut models = parse_agent_model_options(&payload)?;
++    // The bare listing names every model the account can route (aliases from
++    // config.yaml included) but carries no capabilities. The catalog variant adds
++    // `input_modalities` and `context_window`, so graft those onto the bare list
++    // instead of replacing it - otherwise aliases would disappear from the picker.
++    if let Ok(catalog) = fetch_agent_model_catalog_payload(port, api_key).await {
++        if let Ok(catalog) = parse_agent_model_options(&catalog) {
++            merge_agent_model_capabilities(&mut models, &catalog);
++        }
++    }
++    Ok(models)
++}
++
++/// Fill capabilities the bare `/v1/models` listing cannot express. Existing values
++/// win, so an explicit configuration is never overwritten.
++fn merge_agent_model_capabilities(
++    models: &mut [AgentModelOption],
++    catalog: &[AgentModelOption],
++) {
++    for model in models.iter_mut() {
++        let Some(entry) = catalog
++            .iter()
++            .find(|candidate| candidate.name.eq_ignore_ascii_case(&model.name))
++        else {
++            continue;
++        };
++        if model.context_window.is_none() {
++            model.context_window = entry.context_window;
++        }
++        if model.input_modalities.is_none() {
++            model.input_modalities = entry.input_modalities.clone();
++        }
++    }
+ }
+ 
+ pub(crate) async fn fetch_agent_model_payload(
+     port: u16,
+     api_key: &str,
++) -> Result<serde_json::Value, String> {
++    fetch_agent_model_payload_with_client_version(port, api_key, None).await
++}
++
++async fn fetch_agent_model_catalog_payload(
++    port: u16,
++    api_key: &str,
++) -> Result<serde_json::Value, String> {
++    fetch_agent_model_payload_with_client_version(
++        port,
++        api_key,
++        Some(AGENT_MODEL_CATALOG_CLIENT_VERSION),
++    )
++    .await
++}
++
++async fn fetch_agent_model_payload_with_client_version(
++    port: u16,
++    api_key: &str,
++    client_version: Option<&str>,
+ ) -> Result<serde_json::Value, String> {
+     if port == 0 {
+         return Err("Invalid kernel port".to_string());
+@@ -748,11 +805,15 @@ pub(crate) async fn fetch_agent_model_payload(
+     ];
+ 
+     for (index, endpoint) in endpoints.iter().enumerate() {
+-        let response = client
++        let mut request = client
+             .get(endpoint)
+             .bearer_auth(api_key)
+             .header(reqwest::header::ACCEPT, "application/json")
+-            .header(reqwest::header::USER_AGENT, USER_AGENT)
++            .header(reqwest::header::USER_AGENT, USER_AGENT);
++        if let Some(client_version) = client_version {
++            request = request.query(&[("client_version", client_version)]);
++        }
++        let response = request
+             .send()
+             .await
+             .map_err(|error| format!("Failed to request local model list: {error}"))?;
+@@ -1331,7 +1392,8 @@ pub(crate) fn parse_agent_model_options(
+         let name = if let Some(name) = item.as_str() {
+             name.trim().to_string()
+         } else {
+-            ["id", "name", "model", "value"]
++            // The catalog variant names each entry `slug`; the bare listing uses `id`.
++            ["slug", "id", "name", "model", "value"]
+                 .into_iter()
+                 .find_map(|key| item.get(key).and_then(serde_json::Value::as_str))
+                 .unwrap_or_default()
+diff --git a/src-tauri/src/agents/workbuddy.rs b/src-tauri/src/agents/workbuddy.rs
+index 3a2d4a5..ce0fc38 100644
+--- a/src-tauri/src/agents/workbuddy.rs
++++ b/src-tauri/src/agents/workbuddy.rs
+@@ -315,6 +315,11 @@ fn update_workbuddy_model(
+     entry["disabled"] = json!(false);
+     // WorkBuddy prefixes local model IDs itself and removes that prefix before sending requests.
+     entry["useCustomProtocol"] = json!(false);
++    // The client gates image input on `supportsImages === true`, so omitting the
++    // field means "text only" even when the upstream would accept the image. Models
++    // the catalog does not describe (hand-typed custom IDs) therefore default to
++    // supporting images; a catalog entry below still overrides this when known.
++    entry["supportsImages"] = json!(true);
+     if let Some(metadata) = available_models.iter().find(|m| m.name == model) {
+         if let Some(context) = metadata.context_window {
+             entry["maxInputTokens"] = json!(context);

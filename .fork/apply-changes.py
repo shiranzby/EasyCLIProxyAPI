@@ -1312,3 +1312,149 @@ PLUGIN_GROUP_ICON = '<svg fill="currentColor" fill-rule="evenodd" height="1em" s
 with open(os.path.join(ROOT, 'src', 'assets', 'icons', 'plugin.svg'), 'w', encoding='utf-8', newline='') as handle:
     handle.write(PLUGIN_GROUP_ICON)
 print('wrote plugin.svg')
+
+
+
+# --- Agent model catalogs must carry capabilities ----------------------------
+# `GET /v1/models` without `client_version` answers with a bare
+# `{data:[{id,object,owned_by}]}` list: no `input_modalities`, no `context_window`.
+# The agent config writers therefore have nothing to base `supportsImages` (WorkBuddy)
+# or `input` (Harness) on, so every model looks text-only to the client.
+#
+# Ask for the catalog variant too (`client_version=cpa` -> richer `models` array) and
+# graft its capability fields onto the bare list. Keeping the bare list as the source
+# of names means config.yaml aliases and custom model IDs stay in the picker.
+
+replace('src-tauri/src/agents/commands.rs', [
+    (
+        'const AGENT_STATUS_DETECTION_CONCURRENCY: usize = 4;\n',
+        'const AGENT_STATUS_DETECTION_CONCURRENCY: usize = 4;\n'
+        '/// Value of the `client_version` query parameter that makes the kernel return its\n'
+        '/// full model catalog instead of the bare `{id,object,owned_by}` list. The catalog\n'
+        '/// is what carries `input_modalities` and `context_window`, so agent config writers\n'
+        '/// must request it or every model looks text-only.\n'
+        'const AGENT_MODEL_CATALOG_CLIENT_VERSION: &str = "cpa";\n',
+    ),
+    (
+        '    let payload = fetch_agent_model_payload(port, api_key).await?;\n'
+        '    parse_agent_model_options(&payload)\n'
+        '}\n'
+        '\n'
+        'pub(crate) async fn fetch_agent_model_payload(\n'
+        '    port: u16,\n'
+        '    api_key: &str,\n'
+        ') -> Result<serde_json::Value, String> {\n',
+        '    let payload = fetch_agent_model_payload(port, api_key).await?;\n'
+        '    let mut models = parse_agent_model_options(&payload)?;\n'
+        '    // The bare listing names every model the account can route (aliases from\n'
+        '    // config.yaml included) but carries no capabilities. The catalog variant adds\n'
+        '    // `input_modalities` and `context_window`, so graft those onto the bare list\n'
+        '    // instead of replacing it - otherwise aliases would disappear from the picker.\n'
+        '    if let Ok(catalog) = fetch_agent_model_catalog_payload(port, api_key).await {\n'
+        '        if let Ok(catalog) = parse_agent_model_options(&catalog) {\n'
+        '            merge_agent_model_capabilities(&mut models, &catalog);\n'
+        '        }\n'
+        '    }\n'
+        '    Ok(models)\n'
+        '}\n'
+        '\n'
+        '/// Fill capabilities the bare `/v1/models` listing cannot express. Existing values\n'
+        '/// win, so an explicit configuration is never overwritten.\n'
+        'fn merge_agent_model_capabilities(\n'
+        '    models: &mut [AgentModelOption],\n'
+        '    catalog: &[AgentModelOption],\n'
+        ') {\n'
+        '    for model in models.iter_mut() {\n'
+        '        let Some(entry) = catalog\n'
+        '            .iter()\n'
+        '            .find(|candidate| candidate.name.eq_ignore_ascii_case(&model.name))\n'
+        '        else {\n'
+        '            continue;\n'
+        '        };\n'
+        '        if model.context_window.is_none() {\n'
+        '            model.context_window = entry.context_window;\n'
+        '        }\n'
+        '        if model.input_modalities.is_none() {\n'
+        '            model.input_modalities = entry.input_modalities.clone();\n'
+        '        }\n'
+        '    }\n'
+        '}\n'
+        '\n'
+        'pub(crate) async fn fetch_agent_model_payload(\n'
+        '    port: u16,\n'
+        '    api_key: &str,\n'
+        ') -> Result<serde_json::Value, String> {\n'
+        '    fetch_agent_model_payload_with_client_version(port, api_key, None).await\n'
+        '}\n'
+        '\n'
+        'async fn fetch_agent_model_catalog_payload(\n'
+        '    port: u16,\n'
+        '    api_key: &str,\n'
+        ') -> Result<serde_json::Value, String> {\n'
+        '    fetch_agent_model_payload_with_client_version(\n'
+        '        port,\n'
+        '        api_key,\n'
+        '        Some(AGENT_MODEL_CATALOG_CLIENT_VERSION),\n'
+        '    )\n'
+        '    .await\n'
+        '}\n'
+        '\n'
+        'async fn fetch_agent_model_payload_with_client_version(\n'
+        '    port: u16,\n'
+        '    api_key: &str,\n'
+        '    client_version: Option<&str>,\n'
+        ') -> Result<serde_json::Value, String> {\n',
+    ),
+    (
+        '        let response = client\n'
+        '            .get(endpoint)\n'
+        '            .bearer_auth(api_key)\n'
+        '            .header(reqwest::header::ACCEPT, "application/json")\n'
+        '            .header(reqwest::header::USER_AGENT, USER_AGENT)\n'
+        '            .send()\n'
+        '            .await\n'
+        '            .map_err(|error| format!("Failed to request local model list: {error}"))?;\n',
+        '        let mut request = client\n'
+        '            .get(endpoint)\n'
+        '            .bearer_auth(api_key)\n'
+        '            .header(reqwest::header::ACCEPT, "application/json")\n'
+        '            .header(reqwest::header::USER_AGENT, USER_AGENT);\n'
+        '        if let Some(client_version) = client_version {\n'
+        '            request = request.query(&[("client_version", client_version)]);\n'
+        '        }\n'
+        '        let response = request\n'
+        '            .send()\n'
+        '            .await\n'
+        '            .map_err(|error| format!("Failed to request local model list: {error}"))?;\n',
+    ),
+    (
+        '            ["id", "name", "model", "value"]\n'
+        '                .into_iter()\n'
+        '                .find_map(|key| item.get(key).and_then(serde_json::Value::as_str))\n',
+        '            // The catalog variant names each entry `slug`; the bare listing uses `id`.\n'
+        '            ["slug", "id", "name", "model", "value"]\n'
+        '                .into_iter()\n'
+        '                .find_map(|key| item.get(key).and_then(serde_json::Value::as_str))\n',
+    ),
+])
+
+# WorkBuddy gates image input on `supportsImages === true`, so omitting the field means
+# "text only" even when the upstream accepts the image. Models the catalog does not
+# describe (hand-typed custom IDs) therefore default to supporting images; a catalog
+# entry still overrides this when one exists.
+
+replace('src-tauri/src/agents/workbuddy.rs', [
+    (
+        '    // WorkBuddy prefixes local model IDs itself and removes that prefix before sending requests.\n'
+        '    entry["useCustomProtocol"] = json!(false);\n'
+        '    if let Some(metadata) = available_models.iter().find(|m| m.name == model) {\n',
+        '    // WorkBuddy prefixes local model IDs itself and removes that prefix before sending requests.\n'
+        '    entry["useCustomProtocol"] = json!(false);\n'
+        '    // The client gates image input on `supportsImages === true`, so omitting the\n'
+        '    // field means "text only" even when the upstream would accept the image. Models\n'
+        '    // the catalog does not describe (hand-typed custom IDs) therefore default to\n'
+        '    // supporting images; a catalog entry below still overrides this when known.\n'
+        '    entry["supportsImages"] = json!(true);\n'
+        '    if let Some(metadata) = available_models.iter().find(|m| m.name == model) {\n',
+    ),
+])
