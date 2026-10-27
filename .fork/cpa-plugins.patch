@@ -307,6 +307,56 @@ index 68b7fce..99fbdc6 100644
      Ok(format!("{origin}/v8/management/{path}"))
  }
  
+diff --git a/src-tauri/src/plugin_webview.rs b/src-tauri/src/plugin_webview.rs
+index e64a40b..16ec51f 100644
+--- a/src-tauri/src/plugin_webview.rs
++++ b/src-tauri/src/plugin_webview.rs
+@@ -209,6 +209,20 @@ fn plugin_page_script(origin: &str, key: &str, labels: &Labels) -> String {
+     )
+ }
+ 
++fn attach_panel_key(url: &str, key: &str) -> String {
++    let Ok(mut parsed) = Url::parse(url) else {
++        return url.to_string();
++    };
++    let mut query = parsed.query().unwrap_or("").to_string();
++    if !query.is_empty() {
++        query.push('&');
++    }
++    query.push_str("key=");
++    query.push_str(key);
++    parsed.set_query(Some(&query));
++    parsed.into()
++}
++
+ fn entry_action(
+     url_changed: bool,
+     reload: bool,
+@@ -358,6 +372,7 @@ async fn open_plugin_page(
+     let config = gui_config_state.snapshot()?;
+     let url = resolve_plugin_entry_url(&config, &plugin_id, menu_index).await?;
+     let key = management_plaintext_key(&config)?.to_string();
++    let url = attach_panel_key(&url, &key);
+     let origin = url_origin(&url)?;
+     let mut inner = state.lock()?;
+     if !inner.owns(token) {
+@@ -385,7 +400,15 @@ async fn open_plugin_page(
+                 .map(|current| current.origin().ascii_serialization());
+             match entry_action(url_changed, reload, current_origin.as_deref(), &origin) {
+                 EntryAction::Keep => {}
+-                EntryAction::Reload => webview.reload().map_err(|error| error.to_string())?,
++                // The panel strips ?key= from its own location after reading,
++                // so a plain reload() would land back on the manual prompt.
++                EntryAction::Reload => {
++                    let parsed =
++                        Url::parse(&url).map_err(|_| "Invalid plugin page URL".to_string())?;
++                    webview
++                        .navigate(parsed)
++                        .map_err(|error| error.to_string())?;
++                }
+                 EntryAction::Navigate => {
+                     let parsed =
+                         Url::parse(&url).map_err(|_| "Invalid plugin page URL".to_string())?;
 diff --git a/src/assets/icons/plugin.svg b/src/assets/icons/plugin.svg
 new file mode 100644
 index 0000000..8f1402f
@@ -811,65 +861,19 @@ index bd73208..fb7b5bd 100644
    openAuthFilesDirectory: () => invoke<void>('open_auth_files_directory'),
  };
  
-diff --git a/src/services/pluginOAuthRegions.ts b/src/services/pluginOAuthRegions.ts
-new file mode 100644
-index 0000000..a7b73ab
---- /dev/null
-+++ b/src/services/pluginOAuthRegions.ts
-@@ -0,0 +1,49 @@
-+import type { PluginListEntry } from './plugins';
-+
-+export type PluginOAuthRegion = {
-+  key: string;
-+  field: string;
-+  value: string;
-+  label: string;
-+};
-+
-+type RegionDefinition = {
-+  field: string;
-+  values: { value: string; label: string }[];
-+};
-+
-+// CN entries come first: they are the ones used most.
-+const REGION_DEFINITIONS: Record<string, RegionDefinition> = {
-+  zcode: {
-+    field: 'login_provider',
-+    values: [
-+      { value: 'bigmodel', label: '智谱' },
-+      { value: 'zai', label: 'Z.AI' },
-+    ],
-+  },
-+  workbuddy: {
-+    field: 'login_region',
-+    values: [
-+      { value: 'cn', label: '国内' },
-+      { value: 'intl', label: '国际' },
-+    ],
-+  },
-+};
-+
-+/** Regions to offer for a plugin, or [] to keep the plain single card. */
-+export function pluginOAuthRegions(plugin: PluginListEntry): PluginOAuthRegion[] {
-+  const definition = REGION_DEFINITIONS[plugin.id];
-+  if (!definition) return [];
-+  // Only split when the running plugin really declares that field, so a plugin
-+  // that drops it keeps working as one card.
-+  const declared = plugin.configFields.some(
-+    field => field.name === definition.field && field.enumValues.length > 0,
-+  );
-+  if (!declared) return [];
-+  return definition.values.map(entry => ({
-+    key: `${plugin.id}:${entry.value}`,
-+    field: definition.field,
-+    value: entry.value,
-+    label: entry.label,
-+  }));
-+}
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
-index 46b1317..9966b3e 100644
+index 46b1317..876383a 100644
 --- a/src/services/quotaService.ts
 +++ b/src/services/quotaService.ts
+@@ -12,7 +12,7 @@ import {
+   readString,
+ } from './managementApi';
+ import { authFileName } from './authFiles';
+-import { supportsPluginCredentialQuota, loadPluginCredentialQuota } from './pluginCredentialQuota';
++import { supportsPluginCredentialQuota } from './pluginCredentialQuota';
+ import { DEVIN_QUOTA_DATA, DEVIN_QUOTA_HEADERS, DEVIN_QUOTA_URL, readDevinQuota } from './devinQuota';
+ import { antigravityProjectFor, codexMetadataFor, isPaidXaiFile } from './quotaMetadata';
+ import { quotaResetFor, quotaResetInstant } from './quotaTime';
 @@ -24,7 +24,14 @@ const quotaText = (
  ) => translate(getCurrentLocale(), key, variables);
  
@@ -912,7 +916,7 @@ index 46b1317..9966b3e 100644
    if (value === 'x-ai' || value === 'grok') return 'xai';
    if (value === 'cognition') return 'devin';
    if (value === 'anthropic') return 'claude';
-@@ -952,6 +967,142 @@ const callCodexResetCredits = async (
+@@ -952,8 +967,144 @@ const callCodexResetCredits = async (
    return codexResetCreditDetailsFor(payload);
  };
  
@@ -1053,8 +1057,11 @@ index 46b1317..9966b3e 100644
 +}
 +
  async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
-   if (quotaProviderForFile(file) === 'plugin') return loadPluginCredentialQuota(file);
+-  if (quotaProviderForFile(file) === 'plugin') return loadPluginCredentialQuota(file);
++  if (quotaProviderForFile(file) === 'plugin') return loadPluginQuota(file);
    const provider = providerForFile(file);
+   if (!provider) {
+     return {
 @@ -964,6 +1115,7 @@ async function loadQuotaSnapshot(file: AuthFile): Promise<QuotaState> {
    }
    try {

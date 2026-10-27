@@ -1463,3 +1463,73 @@ replace('src-tauri/src/agents/workbuddy.rs', [
         '    if let Some(metadata) = available_models.iter().find(|m| m.name == model) {\n',
     ),
 ])
+
+# --- Credential-page plugin quota --------------------------------------------
+# Upstream v0.3.54 routes every plugin-provider credential to
+# loadPluginCredentialQuota, which requires the plugin to advertise
+# supports_quota and answer the standard POST /plugins/<id>/quota contract.
+# cpa-multi-plugins does neither: supports_quota stays false and the quota
+# figures live on the plugin's own /refresh endpoint instead. Route the
+# 'plugin' provider to the fork's refresh-based loader so the credential cards
+# show the real pack/check-in numbers again.
+
+replace('src/services/quotaService.ts', [
+    (
+        "import { supportsPluginCredentialQuota, loadPluginCredentialQuota } from './pluginCredentialQuota';",
+        "import { supportsPluginCredentialQuota } from './pluginCredentialQuota';",
+    ),
+    (
+        "  if (quotaProviderForFile(file) === 'plugin') return loadPluginCredentialQuota(file);",
+        "  if (quotaProviderForFile(file) === 'plugin') return loadPluginQuota(file);",
+    ),
+])
+
+# --- Plugin panel auto-auth ----------------------------------------------------
+# The cpa-multi-plugins panels gate their localStorage key lookup behind
+# isEmbedded() (window.self !== window.top), but the GUI opens them in a
+# standalone webview, so the management key injected into localStorage is
+# never read and every panel falls back to the manual key prompt. All shipped
+# panels accept ?key= as a documented fallback and strip it from their own
+# location after reading, so attach the management key to the panel URL and
+# re-navigate with it on explicit reloads (plain reload() would land on the
+# cleaned URL and re-prompt).
+
+replace('src-tauri/src/plugin_webview.rs', [
+    (
+        "    let key = management_plaintext_key(&config)?.to_string();\n"
+        "    let origin = url_origin(&url)?;\n",
+        "    let key = management_plaintext_key(&config)?.to_string();\n"
+        "    let url = attach_panel_key(&url, &key);\n"
+        "    let origin = url_origin(&url)?;\n",
+    ),
+    (
+        "                EntryAction::Reload => webview.reload().map_err(|error| error.to_string())?,\n",
+        "                // The panel strips ?key= from its own location after reading,\n"
+        "                // so a plain reload() would land back on the manual prompt.\n"
+        "                EntryAction::Reload => {\n"
+        "                    let parsed =\n"
+        "                        Url::parse(&url).map_err(|_| \"Invalid plugin page URL\".to_string())?;\n"
+        "                    webview\n"
+        "                        .navigate(parsed)\n"
+        "                        .map_err(|error| error.to_string())?;\n"
+        "                }\n",
+    ),
+    (
+        "fn entry_action(\n",
+        "fn attach_panel_key(url: &str, key: &str) -> String {\n"
+        "    let Ok(mut parsed) = Url::parse(url) else {\n"
+        "        return url.to_string();\n"
+        "    };\n"
+        "    let mut query = parsed.query().unwrap_or(\"\").to_string();\n"
+        "    if !query.is_empty() {\n"
+        "        query.push('&');\n"
+        "    }\n"
+        "    query.push_str(\"key=\");\n"
+        "    query.push_str(key);\n"
+        "    parsed.set_query(Some(&query));\n"
+        "    parsed.into()\n"
+        "}\n"
+        "\n"
+        "fn entry_action(\n",
+    ),
+])
