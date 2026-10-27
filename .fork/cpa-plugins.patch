@@ -861,6 +861,61 @@ index bd73208..fb7b5bd 100644
    openAuthFilesDirectory: () => invoke<void>('open_auth_files_directory'),
  };
  
+diff --git a/src/services/pluginOAuthRegions.ts b/src/services/pluginOAuthRegions.ts
+new file mode 100644
+index 0000000..a7b73ab
+--- /dev/null
++++ b/src/services/pluginOAuthRegions.ts
+@@ -0,0 +1,49 @@
++import type { PluginListEntry } from './plugins';
++
++export type PluginOAuthRegion = {
++  key: string;
++  field: string;
++  value: string;
++  label: string;
++};
++
++type RegionDefinition = {
++  field: string;
++  values: { value: string; label: string }[];
++};
++
++// CN entries come first: they are the ones used most.
++const REGION_DEFINITIONS: Record<string, RegionDefinition> = {
++  zcode: {
++    field: 'login_provider',
++    values: [
++      { value: 'bigmodel', label: '智谱' },
++      { value: 'zai', label: 'Z.AI' },
++    ],
++  },
++  workbuddy: {
++    field: 'login_region',
++    values: [
++      { value: 'cn', label: '国内' },
++      { value: 'intl', label: '国际' },
++    ],
++  },
++};
++
++/** Regions to offer for a plugin, or [] to keep the plain single card. */
++export function pluginOAuthRegions(plugin: PluginListEntry): PluginOAuthRegion[] {
++  const definition = REGION_DEFINITIONS[plugin.id];
++  if (!definition) return [];
++  // Only split when the running plugin really declares that field, so a plugin
++  // that drops it keeps working as one card.
++  const declared = plugin.configFields.some(
++    field => field.name === definition.field && field.enumValues.length > 0,
++  );
++  if (!declared) return [];
++  return definition.values.map(entry => ({
++    key: `${plugin.id}:${entry.value}`,
++    field: definition.field,
++    value: entry.value,
++    label: entry.label,
++  }));
++}
 diff --git a/src/services/quotaService.ts b/src/services/quotaService.ts
 index 46b1317..876383a 100644
 --- a/src/services/quotaService.ts
