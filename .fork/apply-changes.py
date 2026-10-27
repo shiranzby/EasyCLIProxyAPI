@@ -217,12 +217,14 @@ replace('src/services/quotaService.ts', [
         "  antigravity: {\n"
         "    Authorization: 'Bearer $TOKEN$',\n"
         "    'Content-Type': 'application/json',\n"
-        "    'User-Agent': 'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)',\n"
+        "    // Keep quota and loadCodeAssist requests aligned with Management Center's Hub client.\n"
+        "    'User-Agent': 'antigravity/hub/2.23.0 darwin/arm64',\n"
         "  },\n};",
         "  antigravity: {\n"
         "    Authorization: 'Bearer $TOKEN$',\n"
         "    'Content-Type': 'application/json',\n"
-        "    'User-Agent': 'antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)',\n"
+        "    // Keep quota and loadCodeAssist requests aligned with Management Center's Hub client.\n"
+        "    'User-Agent': 'antigravity/hub/2.23.0 darwin/arm64',\n"
         "  },\n"
         "  // The plugin API injects the credential server-side; the client only sends the auth index.\n"
         "  plugin: {},\n"
@@ -343,11 +345,11 @@ replace('src/pages/QuotaPage.tsx', [
      "import mimoIcon from '../assets/icons/mimo.png';"),
     ("import { managementApi, readBoolean, responseList } from '../services/managementApi';",
      "import { managementApi, readBoolean, readString, responseList } from '../services/managementApi';"),
-    ("const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {",
+    ("const providerMeta: Record<QuotaDisplayProvider, { label: string; icon: string }> = {",
      "// Every bundled plugin shares the single `plugin` quota provider, so the group icon\n"
-     "// (a generic puzzle) says nothing about which provider a credential belongs to. Show\n"
-     "// the credential's own plugin logo, and keep the group icon only as a fallback for\n"
-     "// plugins that ship no bundled logo.\n"
+     "// says nothing about which provider a credential belongs to. Show the credential's\n"
+     "// own plugin logo, keeping the generic group icon only as a fallback for plugins\n"
+     "// that ship no bundled logo.\n"
      "const PLUGIN_CARD_ICONS: Record<string, string> = {\n"
      "  workbuddy: workbuddyIcon,\n"
      "  trae: traeIcon,\n"
@@ -356,23 +358,20 @@ replace('src/pages/QuotaPage.tsx', [
      "  mimo: mimoIcon,\n"
      "};\n"
      "\n"
-     "const cardIcon = (provider: QuotaProvider | null, file: AuthFile): string => {\n"
+     "const cardIcon = (provider: QuotaDisplayProvider | null, file: AuthFile): string => {\n"
      "  if (provider === 'plugin') {\n"
      "    const pluginId = readString(file, 'provider', 'type', 'account_type').toLowerCase().replace(/_/g, '-');\n"
      "    const own = PLUGIN_CARD_ICONS[pluginId];\n"
      "    if (own) return own;\n"
      "  }\n"
-     "  return provider ? providerMeta[provider].icon : '';\n"
+     "  return provider ? providerMeta[provider].icon : geminiIcon;\n"
      "};\n"
      "\n"
-     "const providerMeta: Record<QuotaProvider, { label: string; icon: string }> = {"),
-    ("          <img src={provider ? providerMeta[provider].icon : ''} alt=\"\" className=\"quota-account-icon\" />",
-     "          <img src={cardIcon(provider, file)} alt=\"\" className=\"quota-account-icon\" />"),
-    ("  antigravity: { label: 'Antigravity', icon: antigravityIcon },\n};",
-     "  antigravity: { label: 'Antigravity', icon: antigravityIcon },\n"
-     "  plugin: { label: 'Plugins', icon: pluginIcon },\n};"),
-    ("const providerOrder: QuotaProvider[] = ['claude', 'antigravity', 'codex', 'xai', 'kimi', 'devin'];",
-     "const providerOrder: QuotaProvider[] = ['claude', 'antigravity', 'codex', 'xai', 'kimi', 'devin', 'plugin'];"),
+     "const providerMeta: Record<QuotaDisplayProvider, { label: string; icon: string }> = {"),
+    (": provider ? providerMeta[provider].icon : geminiIcon} alt=\"\" className=\"quota-account-icon\" />",
+     ": cardIcon(provider, file)} alt=\"\" className=\"quota-account-icon\" />"),
+    ("  plugin: { label: 'Plugin', icon: '' },",
+     "  plugin: { label: 'Plugins', icon: pluginIcon },"),
 ])
 
 QUOTA_MESSAGES = {
@@ -804,11 +803,11 @@ replace('src/pages/PluginOAuthProviders.tsx', [
         "    {plugins.map(plugin => {\n"
         "      const provider = plugin.oauthProvider!;\n"
         "      const authorized = completed.has(provider);\n"
-        "      return <section className=\"panel oauth-card\" key={provider}>\n",
+        "      return <section className=\"panel surface-panel oauth-card\" key={provider}>\n",
         "    {cards.map(({ plugin, region, key }) => {\n"
         "      const provider = plugin.oauthProvider!;\n"
         "      const authorized = completed.has(key);\n"
-        "      return <section className=\"panel oauth-card\" key={key}>\n",
+        "      return <section className=\"panel surface-panel oauth-card\" key={key}>\n",
     ),
     (
         "            <h2>{pluginOAuthText('providerTitle', locale).replace('{name}', getPluginTitle(plugin))}</h2>\n"
@@ -931,7 +930,10 @@ replace('src-tauri/src/management_api.rs', [
         "    fs,\n"
         "    path::Path,\n"
         "    process::{Command, Stdio},\n"
-        "    sync::LazyLock,\n"
+        "    sync::{\n"
+        "        atomic::{AtomicU64, Ordering},\n"
+        "        LazyLock, Mutex,\n"
+        "    },\n"
         "    time::Duration,\n"
         "};",
         "use std::{\n"
@@ -940,7 +942,10 @@ replace('src-tauri/src/management_api.rs', [
         "    fs,\n"
         "    path::{Path, PathBuf},\n"
         "    process::{Command, Stdio},\n"
-        "    sync::LazyLock,\n"
+        "    sync::{\n"
+        "        atomic::{AtomicU64, Ordering},\n"
+        "        LazyLock, Mutex,\n"
+        "    },\n"
         "    time::Duration,\n"
         "};",
     ),
@@ -1133,9 +1138,9 @@ replace('src/pages/AuthFileManagementPage.tsx', [
         "  const toggleStatus = async (file: AuthFile) => {",
     ),
     (
-        "                      <button type=\"button\" className=\"auth-list-action danger\" onClick={() => void deleteFile(file)}",
-        "                      <button type=\"button\" className=\"auth-list-action\" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={15} aria-hidden=\"true\" /></button>\n"
-        "                      <button type=\"button\" className=\"auth-list-action danger\" onClick={() => void deleteFile(file)}",
+        "                      <button type=\"button\" className=\"secondary-button small-button\" onClick={() => void deleteFile(file)} disabled={busy || resettingCooldown || isRuntimeOnly(file)} title={t('common.delete')}>{t('common.delete')}</button>",
+        "                      <button type=\"button\" className=\"secondary-button small-button\" onClick={() => void exportFile(file)} disabled={busy || !readString(file, 'path')} title={t('authFiles.export')} aria-label={t('authFiles.export')}><FileDown size={14} aria-hidden=\"true\" /></button>\n"
+        "                      <button type=\"button\" className=\"secondary-button small-button\" onClick={() => void deleteFile(file)} disabled={busy || resettingCooldown || isRuntimeOnly(file)} title={t('common.delete')}>{t('common.delete')}</button>",
     ),
     (
         "import { useConfirmation } from '../components/ConfirmationDialog';",
