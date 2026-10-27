@@ -1533,3 +1533,79 @@ replace('src-tauri/src/plugin_webview.rs', [
         "fn entry_action(\n",
     ),
 ])
+
+# --- Plugin panel session-key seeding -----------------------------------------
+# The cpa-multi-plugins panels check sessionStorage first, then their
+# embedded-only localStorage fallback (gated behind isEmbedded(), which a
+# standalone webview never satisfies), then a ?key= query that they consume
+# once - the boot getKey() strips it, and load()'s own getKey() re-check runs
+# after the strip and finds nothing. Seed the per-plugin session key at
+# document start instead; the names are not uniform across plugins
+# (qoder uses "qoderwork-mgmt-key", trae derives its own from the path).
+
+replace('src-tauri/src/plugin_webview_script.js', [
+    (
+        "    auth.state.managementKey = K;\n"
+        "    localStorage.setItem('cli-proxy-auth', JSON.stringify(auth));\n"
+        "  }\n"
+        "} catch (e) {}\n",
+        "    auth.state.managementKey = K;\n"
+        "    localStorage.setItem('cli-proxy-auth', JSON.stringify(auth));\n"
+        "    var PIDM = /\/plugins\/([a-z0-9_-]+)\//.exec(location.pathname);\n"
+        "    var SNAMES = { workbuddy: 'workbuddy-mgmt-key', qoder: 'qoderwork-mgmt-key', trae: 'trae-mgmt-key', zcode: 'zcode-mgmt-key', mimo: 'mimo-mgmt-key' };\n"
+        "    if (PIDM) { sessionStorage.setItem(SNAMES[PIDM[1]] || (PIDM[1] + '-mgmt-key'), K); }\n"
+        "  }\n"
+        "} catch (e) {}\n",
+    ),
+])
+
+# --- Quota page: per-plugin card icon -----------------------------------------
+# The plugin branch of the identity header short-circuits to a generic Gauge
+# icon before cardIcon() gets a chance to resolve the credential's own plugin
+# logo. Prefer the bundled per-plugin logo and keep Gauge only as fallback.
+
+replace('src/pages/QuotaPage.tsx', [
+    (
+        "          {provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() !== 'gemini' ? <Gauge size={24} aria-hidden=\"true\" /> : <img src={provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() === 'gemini' ? geminiIcon : cardIcon(provider, file)} alt=\"\" className=\"quota-account-icon\" />}",
+        "          {(() => {\n"
+        "            const pid = provider === 'plugin' ? String(file.provider ?? file.type).toLowerCase().replace(/_/g, '-') : '';\n"
+        "            const own = pid ? PLUGIN_CARD_ICONS[pid] : undefined;\n"
+        "            if (own) return <img src={own} alt=\"\" className=\"quota-account-icon\" />;\n"
+        "            if (provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() !== 'gemini') return <Gauge size={24} aria-hidden=\"true\" />;\n"
+        "            return <img src={provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() === 'gemini' ? geminiIcon : cardIcon(provider, file)} alt=\"\" className=\"quota-account-icon\" />;\n"
+        "          })()}",
+    ),
+    (
+        "          {quota.plan ? <span>{t('quota.planLabel')} <strong>{quota.plan}</strong></span> : null}",
+        "          {quota.plan ? <span>{provider === 'plugin' ? <strong>{quota.plan}</strong> : <>{t('quota.planLabel')} <strong>{quota.plan}</strong></>}</span> : null}",
+    ),
+])
+
+# --- Plugins page: bundled logos on installed plugin cards ---------------------
+# Installed plugin cards render a generic Puzzle mark; the store metadata only
+# carries remote logo URLs, which are unreachable without a proxy. Show the
+# bundled per-plugin logos instead, keeping Puzzle as the fallback.
+
+replace('src/pages/PluginsPage.tsx', [
+    (
+        "import { Notice } from \"../components/Notice\";",
+        "import { Notice } from \"../components/Notice\";\n"
+        "import workbuddyIcon from \"../assets/icons/workbuddy.png\";\n"
+        "import traeIcon from \"../assets/icons/trae.png\";\n"
+        "import qoderIcon from \"../assets/icons/qoder.png\";\n"
+        "import zcodeIcon from \"../assets/icons/zcode.png\";\n"
+        "import mimoIcon from \"../assets/icons/mimo.png\";\n"
+        "\n"
+        "const PLUGIN_PAGE_ICONS: Record<string, string> = {\n"
+        "  workbuddy: workbuddyIcon,\n"
+        "  trae: traeIcon,\n"
+        "  qoder: qoderIcon,\n"
+        "  zcode: zcodeIcon,\n"
+        "  mimo: mimoIcon,\n"
+        "};",
+    ),
+    (
+        "            <div className=\"plugin-card-title\"><span className=\"plugin-icon\"><Puzzle size={23} /></span><div><h2>{getPluginTitle(plugin)}</h2>{getPluginTitle(plugin) !== plugin.id && <code>{plugin.id}</code>}</div>",
+        "            <div className=\"plugin-card-title\"><span className=\"plugin-icon\">{PLUGIN_PAGE_ICONS[plugin.id] ? <img src={PLUGIN_PAGE_ICONS[plugin.id]} alt=\"\" width={23} height={23} style={{ display: \"block\", borderRadius: 6 }} /> : <Puzzle size={23} />}</span><div><h2>{getPluginTitle(plugin)}</h2>{getPluginTitle(plugin) !== plugin.id && <code>{plugin.id}</code>}</div>",
+    ),
+])

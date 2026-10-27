@@ -357,6 +357,20 @@ index e64a40b..16ec51f 100644
                  EntryAction::Navigate => {
                      let parsed =
                          Url::parse(&url).map_err(|_| "Invalid plugin page URL".to_string())?;
+diff --git a/src-tauri/src/plugin_webview_script.js b/src-tauri/src/plugin_webview_script.js
+index e63eaf9..e47386a 100644
+--- a/src-tauri/src/plugin_webview_script.js
++++ b/src-tauri/src/plugin_webview_script.js
+@@ -6,6 +6,9 @@ try {
+     if (!auth.state || typeof auth.state !== 'object' || Array.isArray(auth.state)) auth.state = {};
+     auth.state.managementKey = K;
+     localStorage.setItem('cli-proxy-auth', JSON.stringify(auth));
++    var PIDM = /\/plugins\/([a-z0-9_-]+)\//.exec(location.pathname);
++    var SNAMES = { workbuddy: 'workbuddy-mgmt-key', qoder: 'qoderwork-mgmt-key', trae: 'trae-mgmt-key', zcode: 'zcode-mgmt-key', mimo: 'mimo-mgmt-key' };
++    if (PIDM) { sessionStorage.setItem(SNAMES[PIDM[1]] || (PIDM[1] + '-mgmt-key'), K); }
+   }
+ } catch (e) {}
+ try {
 diff --git a/src/assets/icons/plugin.svg b/src/assets/icons/plugin.svg
 new file mode 100644
 index 0000000..8f1402f
@@ -785,8 +799,39 @@ index 06384e1..4786d1b 100644
      />}
    </>;
  }
+diff --git a/src/pages/PluginsPage.tsx b/src/pages/PluginsPage.tsx
+index c44665e..7230eb1 100644
+--- a/src/pages/PluginsPage.tsx
++++ b/src/pages/PluginsPage.tsx
+@@ -1,4 +1,17 @@
+ import { Notice } from "../components/Notice";
++import workbuddyIcon from "../assets/icons/workbuddy.png";
++import traeIcon from "../assets/icons/trae.png";
++import qoderIcon from "../assets/icons/qoder.png";
++import zcodeIcon from "../assets/icons/zcode.png";
++import mimoIcon from "../assets/icons/mimo.png";
++
++const PLUGIN_PAGE_ICONS: Record<string, string> = {
++  workbuddy: workbuddyIcon,
++  trae: traeIcon,
++  qoder: qoderIcon,
++  zcode: zcodeIcon,
++  mimo: mimoIcon,
++};
+ import { EmptyState } from "../components/EmptyState";
+ import { Tabs } from "../components/Tabs";
+ import { Switch } from "../components/Switch";
+@@ -393,7 +406,7 @@ export function PluginsPage() {
+             const meta = [versionText, plugin.metadata?.author || storeEntry?.author].filter(Boolean).join(" · ");
+             const removeLabel = `${pt(installed ? "remove" : "removeConfig")} ${getPluginTitle(plugin)}`;
+             return <article className="surface-card plugin-card plugin-local-card" key={plugin.id}>
+-            <div className="plugin-card-title"><span className="plugin-icon"><Puzzle size={23} /></span><div><h2>{getPluginTitle(plugin)}</h2>{getPluginTitle(plugin) !== plugin.id && <code>{plugin.id}</code>}</div><span className={`plugin-badge ${status === "active" ? "active" : status === "missingFile" || status === "notLoaded" ? "warning" : ""}`}>{pt(status)}</span></div>
++            <div className="plugin-card-title"><span className="plugin-icon">{PLUGIN_PAGE_ICONS[plugin.id] ? <img src={PLUGIN_PAGE_ICONS[plugin.id]} alt="" width={23} height={23} style={{ display: "block", borderRadius: 6 }} /> : <Puzzle size={23} />}</span><div><h2>{getPluginTitle(plugin)}</h2>{getPluginTitle(plugin) !== plugin.id && <code>{plugin.id}</code>}</div><span className={`plugin-badge ${status === "active" ? "active" : status === "missingFile" || status === "notLoaded" ? "warning" : ""}`}>{pt(status)}</span></div>
+             {meta && <p className="plugin-meta">{meta}</p>}
+             {plugin.path ? <p className="plugin-path">{plugin.path}</p> : <p className="plugin-card-description">{pt("missingFileHint")}</p>}
+             {status === "notLoaded" && <p className="plugin-card-description">{pt("notLoadedHint")}</p>}
 diff --git a/src/pages/QuotaPage.tsx b/src/pages/QuotaPage.tsx
-index ed722de..cfcfe3a 100644
+index ed722de..f8b7aa6 100644
 --- a/src/pages/QuotaPage.tsx
 +++ b/src/pages/QuotaPage.tsx
 @@ -19,7 +19,13 @@ import grokIcon from '../assets/icons/grok.svg';
@@ -835,15 +880,26 @@ index ed722de..cfcfe3a 100644
    claude: { label: 'Claude', icon: claudeIcon },
    codex: { label: 'Codex', icon: codexIcon },
    kimi: { label: 'Kimi', icon: kimiIcon },
-@@ -210,7 +237,7 @@ export function QuotaCard({ file, quota, onRefresh, onReset }: { file: AuthFile;
+@@ -210,11 +237,17 @@ export function QuotaCard({ file, quota, onRefresh, onReset }: { file: AuthFile;
      <article className="panel real-quota-card surface-card">
        <div className="real-quota-card-header">
          <div className="quota-identity">
 -          {provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() !== 'gemini' ? <Gauge size={24} aria-hidden="true" /> : <img src={provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() === 'gemini' ? geminiIcon : provider ? providerMeta[provider].icon : geminiIcon} alt="" className="quota-account-icon" />}
-+          {provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() !== 'gemini' ? <Gauge size={24} aria-hidden="true" /> : <img src={provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() === 'gemini' ? geminiIcon : cardIcon(provider, file)} alt="" className="quota-account-icon" />}
++          {(() => {
++            const pid = provider === 'plugin' ? String(file.provider ?? file.type).toLowerCase().replace(/_/g, '-') : '';
++            const own = pid ? PLUGIN_CARD_ICONS[pid] : undefined;
++            if (own) return <img src={own} alt="" className="quota-account-icon" />;
++            if (provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() !== 'gemini') return <Gauge size={24} aria-hidden="true" />;
++            return <img src={provider === 'plugin' && String(file.provider ?? file.type).toLowerCase() === 'gemini' ? geminiIcon : cardIcon(provider, file)} alt="" className="quota-account-icon" />;
++          })()}
            <div><strong title={name}>{name}</strong></div>
          </div>
          {quota.plan || quota.subscriptionActiveUntil ? <div className="quota-plan">
+-          {quota.plan ? <span>{t('quota.planLabel')} <strong>{quota.plan}</strong></span> : null}
++          {quota.plan ? <span>{provider === 'plugin' ? <strong>{quota.plan}</strong> : <>{t('quota.planLabel')} <strong>{quota.plan}</strong></>}</span> : null}
+           {quota.subscriptionActiveUntil ? <span>{t('quota.expiresAt', { time: formatQuotaTimestamp(quota.subscriptionActiveUntil, locale) })}</span> : null}
+         </div> : null}
+       </div>
 diff --git a/src/services/managementApi.ts b/src/services/managementApi.ts
 index bd73208..fb7b5bd 100644
 --- a/src/services/managementApi.ts
