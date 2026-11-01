@@ -37,6 +37,7 @@ jobs:
       version: ${{ steps.pick.outputs.version }}
       should_build: ${{ steps.pick.outputs.should_build }}
       plugin_tag: ${{ steps.pick.outputs.plugin_tag }}
+      core_version: ${{ steps.pick.outputs.core_version }}
     steps:
       - name: Resolve version
         id: pick
@@ -51,10 +52,16 @@ jobs:
             tag="$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq .tag_name)"
           fi
           plugin_tag="$(gh api "repos/${PLUGIN_REPO}/releases/latest" --jq .tag_name)"
+          # The kernel version is PINNED BY THE UPSTREAM TAG itself: each GUI
+          # release ships a core-version.txt declaring the CLIProxyAPI build it
+          # is certified against. Reading it here makes the GUI<->core pairing
+          # explicit and auditable instead of an implementation detail.
+          core_version="$(gh api "repos/${UPSTREAM_REPO}/contents/core-version.txt?ref=$tag" --jq .content | tr -d '[:space:]')"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "plugin_tag=$plugin_tag" >> "$GITHUB_OUTPUT"
-          echo "upstream=$tag plugins=$plugin_tag"
+          echo "core_version=$core_version" >> "$GITHUB_OUTPUT"
+          echo "upstream=$tag plugins=$plugin_tag core=$core_version"
           if [ "$FORCE" = "true" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -263,12 +270,26 @@ jobs:
             --platform windows \
             --repository "${{ github.repository }}" \
             --tag "$RELEASE_TAG"
+          # Stamp the certified kernel pairing into the update manifest so the
+          # portable updater (and any external upgrade tooling) can see which
+          # CLIProxyAPI build this GUI release is certified against.
+          node -e '
+            const fs = require("fs");
+            const file = process.env.MANIFEST_FILE;
+            const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+            manifest.coreVersion = "v" + process.env.CORE_VERSION;
+            fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
+          '
+        env:
+          CORE_VERSION: ${{ needs.resolve.outputs.core_version }}
+          MANIFEST_FILE: ${{ github.workspace }}/artifacts/portable-update-windows.json
 
       - name: Write release notes
         shell: bash
         env:
           RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
           PLUGIN_TAG: ${{ needs.resolve.outputs.plugin_tag }}
+          CORE_VERSION: ${{ needs.resolve.outputs.core_version }}
         run: |
           {
             echo "EasyCLIProxyAPI ${RELEASE_TAG} - cpa-multi-plugins edition"
@@ -279,6 +300,8 @@ jobs:
             echo "- Bundled cpa-multi-plugins ${PLUGIN_TAG} (WorkBuddy / Trae / Qoder / ZCode / MiMo) under cpa-core/plugins/windows/amd64 (Windows amd64 only)."
             echo "- OAuth page exposes the five plugin providers alongside the built-in ones."
             echo "- The CLIProxyAPI core itself is still fetched and updated from the official upstream releases."
+            echo ""
+            echo "Paired CLIProxyAPI core: v${CORE_VERSION} (pinned by upstream ${RELEASE_TAG} core-version.txt; portable.mjs bundles exactly this build)."
             echo ""
             echo "Upstream release: https://github.com/${UPSTREAM_REPO}/releases/tag/${RELEASE_TAG}"
             echo "Plugins release: https://github.com/${PLUGIN_REPO}/releases/tag/${PLUGIN_TAG}"
