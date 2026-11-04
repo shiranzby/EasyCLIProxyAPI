@@ -263,6 +263,8 @@ jobs:
         working-directory: app
         env:
           RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+          CORE_VERSION: ${{ needs.resolve.outputs.core_version }}
+          MANIFEST_FILE: ${{ github.workspace }}/artifacts/portable-update-windows.json
         run: |
           set -euo pipefail
           node scripts/manifest.mjs \
@@ -280,9 +282,6 @@ jobs:
             manifest.coreVersion = "v" + process.env.CORE_VERSION;
             fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + "\n");
           '
-        env:
-          CORE_VERSION: ${{ needs.resolve.outputs.core_version }}
-          MANIFEST_FILE: ${{ github.workspace }}/artifacts/portable-update-windows.json
 
       - name: Write release notes
         shell: bash
