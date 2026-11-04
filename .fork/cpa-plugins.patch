@@ -379,14 +379,16 @@ index 0000000..8f1402f
 @@ -0,0 +1 @@
 +<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Plugins</title><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/></svg>
 diff --git a/src/i18n/ja.ts b/src/i18n/ja.ts
-index 02639c4..287a7eb 100644
+index 02639c4..106ce19 100644
 --- a/src/i18n/ja.ts
 +++ b/src/i18n/ja.ts
-@@ -2190,4 +2190,17 @@ export const jaOverrides = {
+@@ -2190,4 +2190,19 @@ export const jaOverrides = {
    'quota.service.error.unrecognized': '上流からクォータデータが返されましたが、形式を認識できません',
    'quota.service.error.codexResetOnly': 'リセットクォータを使用できるのは Codex 認証情報のみです',
    'quota.service.error.missingConsumeAuthIndex': 'auth-index がないためリセットクォータを使用できません',
 +  'authFiles.export': 'エクスポート',
++  'authFiles.exportFiltered': '絞り込み結果をエクスポート',
++  'authFiles.exportedCount': '{count} 件の認証ファイルをエクスポートしました',
 +  'authFiles.exported': '{name} をエクスポートしました',
 +  'authFiles.exportFailed': 'エクスポートに失敗: {error}',
 +  'quota.plugin.pool': '全アカウント合計',
@@ -401,14 +403,16 @@ index 02639c4..287a7eb 100644
 +  'quota.plugin.rateLimited': '照会が頻繁すぎます。少し待ってから再試行してください',
  } satisfies Record<MessageKey, string>;
 diff --git a/src/i18n/locales/en.ts b/src/i18n/locales/en.ts
-index ea26759..df7183d 100644
+index ea26759..7d275f0 100644
 --- a/src/i18n/locales/en.ts
 +++ b/src/i18n/locales/en.ts
-@@ -2190,4 +2190,17 @@ export const en: Record<MessageKey, string> = {
+@@ -2190,4 +2190,19 @@ export const en: Record<MessageKey, string> = {
    'quota.service.error.unrecognized': 'Upstream returned quota data in an unrecognized format',
    'quota.service.error.codexResetOnly': 'Only Codex credentials support reset credits',
    'quota.service.error.missingConsumeAuthIndex': 'Missing auth-index; the reset credit cannot be used',
 +  'authFiles.export': 'Export',
++  'authFiles.exportFiltered': 'Export filtered',
++  'authFiles.exportedCount': 'Exported {count} credential files',
 +  'authFiles.exported': 'Exported {name}',
 +  'authFiles.exportFailed': 'Export failed: {error}',
 +  'quota.plugin.pool': 'All accounts',
@@ -423,14 +427,16 @@ index ea26759..df7183d 100644
 +  'quota.plugin.rateLimited': 'Too many quota lookups at once, please try again in a moment',
  };
 diff --git a/src/i18n/locales/zh-CN.ts b/src/i18n/locales/zh-CN.ts
-index 10315f9..d5d1bfa 100644
+index 10315f9..1a13c58 100644
 --- a/src/i18n/locales/zh-CN.ts
 +++ b/src/i18n/locales/zh-CN.ts
-@@ -2189,6 +2189,19 @@ export const zhCN = {
+@@ -2189,6 +2189,21 @@ export const zhCN = {
    'quota.service.error.unrecognized': '上游返回了配额数据，但无法识别',
    'quota.service.error.codexResetOnly': '只有 Codex 凭据支持使用重置额度',
    'quota.service.error.missingConsumeAuthIndex': '缺少 auth-index，无法使用重置额度',
 +  'authFiles.export': '导出',
++  'authFiles.exportFiltered': '导出筛选结果',
++  'authFiles.exportedCount': '已导出 {count} 个凭证文件',
 +  'authFiles.exported': '已导出 {name}',
 +  'authFiles.exportFailed': '导出失败：{error}',
 +  'quota.plugin.pool': '账号池合计',
@@ -447,14 +453,14 @@ index 10315f9..d5d1bfa 100644
  
  export type MessageKey = keyof typeof zhCN;
 diff --git a/src/pages/AuthFileManagementPage.tsx b/src/pages/AuthFileManagementPage.tsx
-index 59f77e5..79c1672 100644
+index 59f77e5..3ec1f45 100644
 --- a/src/pages/AuthFileManagementPage.tsx
 +++ b/src/pages/AuthFileManagementPage.tsx
 @@ -4,6 +4,7 @@ import { EmptyState } from '../components/EmptyState';
  import { Checkbox } from '../components/Checkbox';
  import { commitFetchedQuota } from '../services/quotaEnrichment';
  import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-+import { save } from '@tauri-apps/plugin-dialog';
++import { open, save } from '@tauri-apps/plugin-dialog';
  import { useConfirmation } from '../components/ConfirmationDialog';
  import { QuotaActionFeedback } from '../components/QuotaActionFeedback';
  import { AuthFileQuotaPanel } from '../components/AuthFileQuotaPanel';
@@ -475,7 +481,7 @@ index 59f77e5..79c1672 100644
    managementApi,
    readBoolean,
    readNumber,
-@@ -105,6 +112,86 @@ const providerIcons: Record<string, string> = {
+@@ -105,6 +112,127 @@ const providerIcons: Record<string, string> = {
    xai: grokIcon,
    devin: devinIcon,
    meta: metaIcon,
@@ -541,6 +547,47 @@ index 59f77e5..79c1672 100644
 +    parsed = null;
 +  }
 +  const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
++  // CockpitTools codex export (agtools shape): {id: "codex_<hash>", email,
++  // plan_type, account_id, tokens: {id_token, access_token, refresh_token}}.
++  // Codex is a core provider: convert to the flat CodexTokenStorage file the
++  // core expects instead of the plugin {account, auth} wrapper.
++  const cockpitCodex = entries.filter((entry) => String(entry.id ?? '').startsWith('codex_') && isRecord(entry.tokens));
++  if (cockpitCodex.length > 0 && cockpitCodex.length === entries.length) {
++    const jwtExpiredIso = (token: string): string => {
++      try {
++        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
++        return typeof payload.exp === 'number' && Number.isFinite(payload.exp) ? new Date(payload.exp * 1000).toISOString() : '';
++      } catch { return ''; }
++    };
++    const seen = new Set<string>();
++    let uploaded = 0;
++    for (const account of cockpitCodex) {
++      const tokens = account.tokens as Record<string, unknown>;
++      const email = String(account.email ?? '').trim();
++      const plan = String(account.plan_type ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
++      const accountId = String(account.account_id ?? account.id ?? '').trim();
++      const accessToken = String(tokens.access_token ?? '');
++      const base = (accountId ? `codex-${accountId}-${email}` : `codex-${email}`) + (plan ? `-${plan}` : '') + '.json';
++      let name = base.replace(/[\\/:*?"<>|]/g, '_');
++      let n = 2;
++      while (seen.has(name)) { name = base.replace(/\.json$/, `-${n}.json`).replace(/[\\/:*?"<>|]/g, '_'); n += 1; }
++      seen.add(name);
++      const storage = {
++        id_token: String(tokens.id_token ?? ''),
++        access_token: accessToken,
++        refresh_token: String(tokens.refresh_token ?? ''),
++        account_id: accountId,
++        last_refresh: new Date().toISOString(),
++        email,
++        type: 'codex',
++        expired: jwtExpiredIso(accessToken),
++        plan_type: String(account.plan_type ?? ''),
++      };
++      await managementApi.uploadAuthFileContent(name, JSON.stringify(storage, null, 2));
++      uploaded += 1;
++    }
++    return uploaded;
++  }
 +  const alreadyCredential =
 +    entries.length === 1 && (isRecord(entries[0].auth) || isRecord(entries[0].account));
 +  if (parsed === null || entries.length === 0 || alreadyCredential) {
@@ -562,7 +609,7 @@ index 59f77e5..79c1672 100644
  };
  
  const providerName = (file: AuthFile) => {
-@@ -398,8 +485,7 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
+@@ -398,8 +526,7 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
      const failures: string[] = [];
      for (const file of selected) {
        try {
@@ -572,10 +619,40 @@ index 59f77e5..79c1672 100644
        } catch (requestError) {
          failures.push(`${file.name}：${String(requestError)}`);
        }
-@@ -429,6 +515,31 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
+@@ -429,6 +556,61 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
      finally { refreshPending.current = false; if (mountedRef.current) setBusy(false); }
    };
  
++  const exportFiltered = async () => {
++    feedback.clearNotice();
++    setError('');
++    if (visibleFiles.length === 0) return;
++    setBusy(true);
++    try {
++      const dir = await open({ directory: true });
++      if (!dir) return;
++      let done = 0;
++      const failures: string[] = [];
++      for (const file of visibleFiles) {
++        const source = readString(file, 'path');
++        const name = fileName(file);
++        if (!source) { failures.push(`${name}：${t('authFiles.fileOnly')}`); continue; }
++        try {
++          await managementApi.exportAuthFile(source, `${dir}/${name}`);
++          done += 1;
++        } catch (requestError) {
++          failures.push(`${name}：${String(requestError)}`);
++        }
++      }
++      if (done > 0) showNotice({ key: 'authFiles.exportedCount', variables: { count: done } });
++      if (failures.length > 0) setError(t('authFiles.exportFailed', { error: failures.join('; ') }));
++    } catch (requestError) {
++      setError(t('authFiles.exportFailed', { error: String(requestError) }));
++    } finally {
++      setBusy(false);
++    }
++  };
++
 +  const exportFile = async (file: AuthFile) => {
 +    feedback.clearNotice();
 +    setError('');
@@ -604,7 +681,17 @@ index 59f77e5..79c1672 100644
    const toggleStatus = async (file: AuthFile) => {
      feedback.clearNotice();
      setBusy(true);
-@@ -606,6 +717,7 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
+@@ -508,6 +690,9 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
+         <button type="button" className="secondary-button small-button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+           <Import size={16} />{t('authFiles.import')}
+         </button>
++        <button type="button" className="secondary-button small-button" onClick={() => void exportFiltered()} disabled={busy || loading || visibleFiles.length === 0} title={t('authFiles.exportFiltered')}>
++          <FileDown size={16} />{t('authFiles.exportFiltered')}
++        </button>
+         <button type="button" className="secondary-button small-button ghost" disabled={busy || loading} onClick={() => setBatchOpen(true)}>{t('authFiles.operations.title')}</button>
+         <input ref={fileInputRef} type="file" accept=".json,application/json" multiple hidden onChange={(event) => void handleUpload(event)} />
+         </div>
+@@ -606,6 +791,7 @@ export function AuthFileManagementPage({ initialProvider }: { initialProvider?:
                        <button type="button" className="secondary-button small-button" onClick={() => setSettingsName(name)} disabled={busy || resettingCooldown || !isOAuthCredentialFile(file)} title={t(isOAuthCredentialFile(file) ? 'authFiles.settings.title' : 'authFiles.fileOnly')}>{t('authFiles.action.settings')}</button>
                        <button type="button" className="secondary-button small-button" onClick={() => setModelViewName(name)} disabled={busy || !providerKey(file)} title={t('authFiles.models.viewTitle')}>{t('authFiles.action.models')}</button>
                        <button type="button" className="secondary-button small-button" onClick={() => void copyName(name)} disabled={busy} title={t('authFiles.copyName')}>{copied === name ? <Check size={14} aria-hidden="true" /> : null}{t('authFiles.action.copy')}</button>

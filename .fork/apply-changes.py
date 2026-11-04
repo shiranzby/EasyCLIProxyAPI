@@ -1609,3 +1609,140 @@ replace('src/pages/PluginsPage.tsx', [
         "            <div className=\"plugin-card-title\"><span className=\"plugin-icon\">{PLUGIN_PAGE_ICONS[plugin.id] ? <img src={PLUGIN_PAGE_ICONS[plugin.id]} alt=\"\" width={23} height={23} style={{ display: \"block\", borderRadius: 6 }} /> : <Puzzle size={23} />}</span><div><h2>{getPluginTitle(plugin)}</h2>{getPluginTitle(plugin) !== plugin.id && <code>{plugin.id}</code>}</div>",
     ),
 ])
+
+# --- Credential import/export: CockpitTools adaptation + filtered batch export
+# The credential page import only accepted core-native auth files, so the
+# CockpitTools codex account export (agtools shape: {id: "codex_<hash>",
+# email, plan_type, account_id, tokens: {...}}, single object or array) was
+# normalized into the plugin {account, auth} wrapper, which the core's codex
+# provider (a built-in, not a plugin) cannot read. Detect the agtools shape
+# inside importCredentialFile and convert to the flat CodexTokenStorage files
+# (one per account, named after internal/auth/codex/filename.go). Also add a
+# filtered batch export: export every credential matching the current
+# provider/search/status filters into a user-chosen directory.
+
+replace('src/pages/AuthFileManagementPage.tsx', [
+    (
+        "import { save } from '@tauri-apps/plugin-dialog';",
+        "import { open, save } from '@tauri-apps/plugin-dialog';",
+    ),
+    (
+        r"""const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
+  const alreadyCredential =""",
+        r"""const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
+  // CockpitTools codex export (agtools shape): {id: "codex_<hash>", email,
+  // plan_type, account_id, tokens: {id_token, access_token, refresh_token}}.
+  // Codex is a core provider: convert to the flat CodexTokenStorage file the
+  // core expects instead of the plugin {account, auth} wrapper.
+  const cockpitCodex = entries.filter((entry) => String(entry.id ?? '').startsWith('codex_') && isRecord(entry.tokens));
+  if (cockpitCodex.length > 0 && cockpitCodex.length === entries.length) {
+    const jwtExpiredIso = (token: string): string => {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return typeof payload.exp === 'number' && Number.isFinite(payload.exp) ? new Date(payload.exp * 1000).toISOString() : '';
+      } catch { return ''; }
+    };
+    const seen = new Set<string>();
+    let uploaded = 0;
+    for (const account of cockpitCodex) {
+      const tokens = account.tokens as Record<string, unknown>;
+      const email = String(account.email ?? '').trim();
+      const plan = String(account.plan_type ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const accountId = String(account.account_id ?? account.id ?? '').trim();
+      const accessToken = String(tokens.access_token ?? '');
+      const base = (accountId ? `codex-${accountId}-${email}` : `codex-${email}`) + (plan ? `-${plan}` : '') + '.json';
+      let name = base.replace(/[\\/:*?"<>|]/g, '_');
+      let n = 2;
+      while (seen.has(name)) { name = base.replace(/\.json$/, `-${n}.json`).replace(/[\\/:*?"<>|]/g, '_'); n += 1; }
+      seen.add(name);
+      const storage = {
+        id_token: String(tokens.id_token ?? ''),
+        access_token: accessToken,
+        refresh_token: String(tokens.refresh_token ?? ''),
+        account_id: accountId,
+        last_refresh: new Date().toISOString(),
+        email,
+        type: 'codex',
+        expired: jwtExpiredIso(accessToken),
+        plan_type: String(account.plan_type ?? ''),
+      };
+      await managementApi.uploadAuthFileContent(name, JSON.stringify(storage, null, 2));
+      uploaded += 1;
+    }
+    return uploaded;
+  }
+  const alreadyCredential =""",
+    ),
+    (
+        """  const exportFile = async (file: AuthFile) => {""",
+        """  const exportFiltered = async () => {
+    feedback.clearNotice();
+    setError('');
+    if (visibleFiles.length === 0) return;
+    setBusy(true);
+    try {
+      const dir = await open({ directory: true });
+      if (!dir) return;
+      let done = 0;
+      const failures: string[] = [];
+      for (const file of visibleFiles) {
+        const source = readString(file, 'path');
+        const name = fileName(file);
+        if (!source) { failures.push(`${name}：${t('authFiles.fileOnly')}`); continue; }
+        try {
+          await managementApi.exportAuthFile(source, `${dir}/${name}`);
+          done += 1;
+        } catch (requestError) {
+          failures.push(`${name}：${String(requestError)}`);
+        }
+      }
+      if (done > 0) showNotice({ key: 'authFiles.exportedCount', variables: { count: done } });
+      if (failures.length > 0) setError(t('authFiles.exportFailed', { error: failures.join('; ') }));
+    } catch (requestError) {
+      setError(t('authFiles.exportFailed', { error: String(requestError) }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportFile = async (file: AuthFile) => {""",
+    ),
+    (
+        """        <button type="button" className="secondary-button small-button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+          <Import size={16} />{t('authFiles.import')}
+        </button>""",
+        """        <button type="button" className="secondary-button small-button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+          <Import size={16} />{t('authFiles.import')}
+        </button>
+        <button type="button" className="secondary-button small-button" onClick={() => void exportFiltered()} disabled={busy || loading || visibleFiles.length === 0} title={t('authFiles.exportFiltered')}>
+          <FileDown size={16} />{t('authFiles.exportFiltered')}
+        </button>""",
+    ),
+])
+
+replace('src/i18n/locales/zh-CN.ts', [
+    (
+        "  'authFiles.export': '导出',",
+        """  'authFiles.export': '导出',
+  'authFiles.exportFiltered': '导出筛选结果',
+  'authFiles.exportedCount': '已导出 {count} 个凭证文件',""",
+    ),
+])
+
+replace('src/i18n/locales/en.ts', [
+    (
+        "  'authFiles.export': 'Export',",
+        """  'authFiles.export': 'Export',
+  'authFiles.exportFiltered': 'Export filtered',
+  'authFiles.exportedCount': 'Exported {count} credential files',""",
+    ),
+])
+
+replace('src/i18n/ja.ts', [
+    (
+        "  'authFiles.export': 'エクスポート',",
+        """  'authFiles.export': 'エクスポート',
+  'authFiles.exportFiltered': '絞り込み結果をエクスポート',
+  'authFiles.exportedCount': '{count} 件の認証ファイルをエクスポートしました',""",
+    ),
+])
