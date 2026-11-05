@@ -1079,12 +1079,22 @@ replace('src/pages/AuthFileManagementPage.tsx', [
         "  }\n"
         "  const fallbackProvider = file.name.split(/[_.-]/)[0].toLowerCase();\n"
         "  let uploaded = 0;\n"
+        "  const seen = new Set<string>();\n"
+        "  let index = 0;\n"
         "  for (const entry of entries) {\n"
+        "    index += 1;\n"
         "    const normalized = normalizeImportedCredential(entry, fallbackProvider);\n"
         "    const provider =\n"
         "      readString(normalized, 'provider', 'type', 'account_type') || fallbackProvider || 'credential';\n"
         "    const uid = isRecord(normalized.account) ? readString(normalized.account, 'uid') : '';\n"
-        "    const name = uid ? `${provider}-${uid}.json` : file.name;\n"
+        "    // Never reuse a filename: multi-account exports without a uid used to\n"
+        "    // all collapse onto file.name, overwriting every account but the last.\n"
+        "    const stem = file.name.replace(/\\.json$/i, '').replace(/[\\\\/:*?\"<>|]/g, '_');\n"
+        "    const base = uid ? `${provider}-${uid}.json` : `${stem}-${index}.json`;\n"
+        "    let name = base.replace(/[\\\\/:*?\"<>|]/g, '_');\n"
+        "    let suffix = 2;\n"
+        "    while (seen.has(name)) { name = base.replace(/\\.json$/, `-${suffix}.json`).replace(/[\\\\/:*?\"<>|]/g, '_'); suffix += 1; }\n"
+        "    seen.add(name);\n"
         "    await managementApi.uploadAuthFileContent(name, JSON.stringify(normalized));\n"
         "    uploaded += 1;\n"
         "  }\n"
@@ -1611,14 +1621,19 @@ replace('src/pages/PluginsPage.tsx', [
 ])
 
 # --- Credential import/export: CockpitTools adaptation + filtered batch export
-# The credential page import only accepted core-native auth files, so the
-# CockpitTools codex account export (agtools shape: {id: "codex_<hash>",
-# email, plan_type, account_id, tokens: {...}}, single object or array) was
-# normalized into the plugin {account, auth} wrapper, which the core's codex
-# provider (a built-in, not a plugin) cannot read. Detect the agtools shape
-# inside importCredentialFile and convert to the flat CodexTokenStorage files
-# (one per account, named after internal/auth/codex/filename.go). Also add a
-# filtered batch export: export every credential matching the current
+# The credential page import only accepted core-native auth files, so third-party
+# codex account exports were normalized into the plugin {account, auth} wrapper,
+# which the core's codex provider (a built-in, not a plugin) cannot read, and
+# every account in an array was written to the SAME filename (the source file's
+# name) so only the last one survived.
+# CockpitTools/agtools codex exports come in two shapes:
+#   1. nested: {id: "codex_<hash>", email, plan_type, account_id, tokens: {...}}
+#   2. flat:   {id_token, access_token, refresh_token, account_id, email,
+#               type: "codex", last_refresh, expired, tags}
+# Detect both inside importCredentialFile and write each account as its own flat
+# CodexTokenStorage file named with the core's `codex-` prefix (see
+# internal/auth/codex/filename.go), de-duplicating names so nothing overwrites.
+# Also add a filtered batch export: export every credential matching the current
 # provider/search/status filters into a user-chosen directory.
 
 replace('src/pages/AuthFileManagementPage.tsx', [
@@ -1630,12 +1645,19 @@ replace('src/pages/AuthFileManagementPage.tsx', [
         r"""const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
   const alreadyCredential =""",
         r"""const entries = (Array.isArray(parsed) ? parsed : [parsed]).filter(isRecord);
-  // CockpitTools codex export (agtools shape): {id: "codex_<hash>", email,
-  // plan_type, account_id, tokens: {id_token, access_token, refresh_token}}.
-  // Codex is a core provider: convert to the flat CodexTokenStorage file the
-  // core expects instead of the plugin {account, auth} wrapper.
-  const cockpitCodex = entries.filter((entry) => String(entry.id ?? '').startsWith('codex_') && isRecord(entry.tokens));
-  if (cockpitCodex.length > 0 && cockpitCodex.length === entries.length) {
+  // Codex is a CORE provider, not a plugin. CockpitTools/agtools exports come
+  // in two shapes: a nested `tokens` object, or a flat core storage record.
+  // Both are arrays of accounts. Write each account to its OWN flat
+  // CodexTokenStorage file named with the core's `codex-` prefix; wrapping it
+  // in the plugin {account, auth} shape, or reusing one filename for the whole
+  // array, makes the core ignore it (or overwrite every account but the last).
+  const isNestedCodex = (entry: Record<string, unknown>) =>
+    String(entry.id ?? '').startsWith('codex_') && isRecord(entry.tokens);
+  const isFlatCodex = (entry: Record<string, unknown>) =>
+    String(entry.type ?? '').toLowerCase() === 'codex' &&
+    String(entry.access_token ?? '').length > 0;
+  const codexEntries = entries.filter((entry) => isNestedCodex(entry) || isFlatCodex(entry));
+  if (codexEntries.length > 0 && codexEntries.length === entries.length) {
     const jwtExpiredIso = (token: string): string => {
       try {
         const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
@@ -1644,28 +1666,30 @@ replace('src/pages/AuthFileManagementPage.tsx', [
     };
     const seen = new Set<string>();
     let uploaded = 0;
-    for (const account of cockpitCodex) {
-      const tokens = account.tokens as Record<string, unknown>;
+    for (const account of codexEntries) {
+      const tokens = (isRecord(account.tokens) ? account.tokens : account) as Record<string, unknown>;
       const email = String(account.email ?? '').trim();
-      const plan = String(account.plan_type ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const planRaw = String(account.plan_type ?? '').trim();
+      const plan = planRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       const accountId = String(account.account_id ?? account.id ?? '').trim();
       const accessToken = String(tokens.access_token ?? '');
-      const base = (accountId ? `codex-${accountId}-${email}` : `codex-${email}`) + (plan ? `-${plan}` : '') + '.json';
+      const base = (accountId ? `codex-${accountId}-${email}` : `codex-${email || 'account'}`) + (plan ? `-${plan}` : '') + '.json';
       let name = base.replace(/[\\/:*?"<>|]/g, '_');
-      let n = 2;
-      while (seen.has(name)) { name = base.replace(/\.json$/, `-${n}.json`).replace(/[\\/:*?"<>|]/g, '_'); n += 1; }
+      let suffix = 2;
+      while (seen.has(name)) { name = base.replace(/\.json$/, `-${suffix}.json`).replace(/[\\/:*?"<>|]/g, '_'); suffix += 1; }
       seen.add(name);
-      const storage = {
+      const storage: Record<string, unknown> = {
         id_token: String(tokens.id_token ?? ''),
         access_token: accessToken,
         refresh_token: String(tokens.refresh_token ?? ''),
         account_id: accountId,
-        last_refresh: new Date().toISOString(),
+        last_refresh: String(tokens.last_refresh ?? account.last_refresh ?? new Date().toISOString()),
         email,
         type: 'codex',
-        expired: jwtExpiredIso(accessToken),
-        plan_type: String(account.plan_type ?? ''),
+        expired: String(tokens.expired ?? account.expired ?? '') || jwtExpiredIso(accessToken),
+        plan_type: planRaw,
       };
+      if (Array.isArray(account.tags)) storage.tags = account.tags;
       await managementApi.uploadAuthFileContent(name, JSON.stringify(storage, null, 2));
       uploaded += 1;
     }

@@ -56,7 +56,9 @@ jobs:
           # release ships a core-version.txt declaring the CLIProxyAPI build it
           # is certified against. Reading it here makes the GUI<->core pairing
           # explicit and auditable instead of an implementation detail.
-          core_version="$(gh api "repos/${UPSTREAM_REPO}/contents/core-version.txt?ref=$tag" --jq .content | tr -d '[:space:]')"
+          # Contents API returns the file as base64; decode it before using it as
+          # a version, otherwise the manifest/release notes get "vOC4wLjQ0Cg==".
+          core_version="$(gh api "repos/${UPSTREAM_REPO}/contents/core-version.txt?ref=$tag" --jq .content | base64 -d | tr -d '[:space:]')"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "plugin_tag=$plugin_tag" >> "$GITHUB_OUTPUT"
